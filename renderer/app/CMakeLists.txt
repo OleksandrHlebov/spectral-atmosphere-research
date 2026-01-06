@@ -31,7 +31,9 @@ FetchContent_MakeAvailable(VulkanClasses)
 
 set(SHADER_SOURCES
     "basic_color.frag"
-    "basic_transform.vert")
+    "basic_transform.vert"
+    "sky_color.frag"
+    "fsquad.vert")
 
 set(HEADER
     inc/helper.h

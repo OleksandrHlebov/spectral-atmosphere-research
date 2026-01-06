@@ -66,9 +66,12 @@ private:
 	uptr<vkc::PipelineLayout> m_PipelineLayout;
 	uptr<vkc::Pipeline>       m_Pipeline{};
 
+	uptr<vkc::Pipeline> m_SkyRenderPipeline{};
+
 	VkFormat             m_DepthFormat{};
 	uptr<vkc::Image>     m_DepthImage{};
 	uptr<vkc::ImageView> m_DepthImageView{};
+	VkSampler            m_Sampler{};
 
 	std::vector<vkc::Image>     m_SwapchainImages;
 	std::vector<vkc::ImageView> m_SwapchainImageViews;

@@ -16,7 +16,7 @@ App::App(int width, int height)
 	m_Camera = std::make_unique<Camera>(glm::vec3(.0f, .0f, .0f)
 										, 45.f
 										, static_cast<float>(width) / height // NOLINT(*-narrowing-conversions)
-										, .0f
+										, .0001f
 										, 100.f);
 	CreateWindow(width, height);
 	CreateInstance();
@@ -36,11 +36,9 @@ App::App(int width, int height)
 		vkb::destroy_swapchain(m_Context.Swapchain);
 	});
 	CreateCmdPool();
-	// TODO: Load scene
 	CreateVertexBuffer();
-	CreateDescriptorSetLayouts();
-	// TODO: Create resources (depth/textures)
 	CreateResources();
+	CreateDescriptorSetLayouts();
 	CreateGraphicsPipeline();
 	CreateSyncObjects();
 	CreateDescriptorPool();
@@ -283,10 +281,14 @@ void App::CreateDescriptorSets()
 		bufferInfo.range  = VK_WHOLE_SIZE;
 		bufferInfo.offset = 0;
 
-		VkDescriptorBufferInfo infos[]{ bufferInfo };
+		VkDescriptorImageInfo imageInfo{};
+		imageInfo.imageView   = *m_DepthImageView;
+		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		imageInfo.sampler     = m_Sampler;
 
 		m_FrameDescriptorSets[index]
-			.AddWriteDescriptor(infos, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0)
+			.AddWriteDescriptor({ &bufferInfo, 1 }, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0)
+			.AddWriteDescriptor({ &imageInfo, 1 }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, 0)
 			.Update(m_Context);
 	}
 }
@@ -295,8 +297,8 @@ void App::CreateVertexBuffer()
 {
 	Vertex constexpr vertices[]{
 		{ glm::vec3{ .0f, .5f, 1.f } }
-		, { glm::vec3{ -.5f, -.5f, 1.f } }
 		, { glm::vec3{ .5f, -.5f, 1.f } }
+		, { glm::vec3{ -.5f, -.5f, 1.f } }
 	};
 
 	vkc::BufferBuilder stagingBufferBuilder{ m_Context };
@@ -336,6 +338,8 @@ void App::CreateGraphicsPipeline()
 
 	vkc::ShaderStage const vert{ m_Context, help::ReadFile("shaders/basic_transform.spv"), VK_SHADER_STAGE_VERTEX_BIT };
 	vkc::ShaderStage const frag{ m_Context, help::ReadFile("shaders/basic_color.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
+	vkc::ShaderStage const fsQuad{ m_Context, help::ReadFile("shaders/fsquad.spv"), VK_SHADER_STAGE_VERTEX_BIT };
+	vkc::ShaderStage const sky{ m_Context, help::ReadFile("shaders/sky_color.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
 
 	VkFormat colorAttachmentFormats[]{ m_Context.Swapchain.image_format };
 
@@ -343,24 +347,46 @@ void App::CreateGraphicsPipeline()
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
 										  VK_COLOR_COMPONENT_A_BIT;
 
-	vkc::PipelineBuilder builder{ m_Context };
-	vkc::Pipeline        pipeline = builder
-							 .SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
-							 .AddViewport(m_Context.Swapchain.extent)
-							 .SetPolygonMode(VK_POLYGON_MODE_FILL)
-							 .SetCullMode(VK_CULL_MODE_BACK_BIT)
-							 .SetFrontFace(VK_FRONT_FACE_CLOCKWISE)
-							 .SetVertexDescription(Vertex::GetBindingDescription(), Vertex::GetAttributeDescription())
-							 .AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
-							 .AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
-							 .AddColorBlendAttachment(colorBlendAttachment)
-							 .SetRenderingAttachments(colorAttachmentFormats, m_DepthFormat, VK_FORMAT_UNDEFINED)
-							 .EnableDepthTest(VK_COMPARE_OP_LESS_OR_EQUAL)
-							 .EnableDepthWrite()
-							 .AddShaderStage(vert)
-							 .AddShaderStage(frag)
-							 .Build(*m_PipelineLayout, true);
-	m_Pipeline = std::make_unique<vkc::Pipeline>(std::move(pipeline));
+	//
+	{
+		vkc::PipelineBuilder builder{ m_Context };
+		vkc::Pipeline        pipeline = builder
+								 .SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+								 .AddViewport(m_Context.Swapchain.extent)
+								 .SetPolygonMode(VK_POLYGON_MODE_FILL)
+								 .SetCullMode(VK_CULL_MODE_BACK_BIT)
+								 .SetFrontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE)
+								 .SetVertexDescription(Vertex::GetBindingDescription(), Vertex::GetAttributeDescription())
+								 .AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
+								 .AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
+								 .AddColorBlendAttachment(colorBlendAttachment)
+								 .SetRenderingAttachments(colorAttachmentFormats, m_DepthFormat, VK_FORMAT_UNDEFINED)
+								 .EnableDepthTest(VK_COMPARE_OP_LESS)
+								 .EnableDepthWrite()
+								 .AddShaderStage(vert)
+								 .AddShaderStage(frag)
+								 .Build(*m_PipelineLayout, true);
+		m_Pipeline = std::make_unique<vkc::Pipeline>(std::move(pipeline));
+	}
+
+	//
+	{
+		vkc::PipelineBuilder builder{ m_Context };
+		vkc::Pipeline        pipeline = builder
+								 .SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+								 .AddViewport(m_Context.Swapchain.extent)
+								 .SetPolygonMode(VK_POLYGON_MODE_FILL)
+								 .SetCullMode(VK_CULL_MODE_BACK_BIT)
+								 .SetFrontFace(VK_FRONT_FACE_CLOCKWISE)
+								 .AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
+								 .AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
+								 .AddColorBlendAttachment(colorBlendAttachment)
+								 .SetRenderingAttachments(colorAttachmentFormats, VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED)
+								 .AddShaderStage(fsQuad)
+								 .AddShaderStage(sky)
+								 .Build(*m_PipelineLayout, true);
+		m_SkyRenderPipeline = std::make_unique<vkc::Pipeline>(std::move(pipeline));
+	}
 }
 
 void App::CreateCmdPool()
@@ -376,6 +402,7 @@ void App::CreateDescriptorSetLayouts()
 	vkc::DescriptorSetLayoutBuilder builder{ m_Context };
 	vkc::DescriptorSetLayout        layout = builder
 									  .AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
+									  .AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
 									  .Build();
 
 	m_FrameDescSetLayout = std::make_unique<vkc::DescriptorSetLayout>(std::move(layout));
@@ -391,6 +418,20 @@ void App::CreateResources()
 		for (uint32_t index{}; index < m_FramesInFlight; ++index)
 			m_MVPUBOs.emplace_back(builder.Build(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(ModelViewProj)));
 	}
+	//
+	{
+		VkSamplerCreateInfo samplerCreateInfo{};
+		samplerCreateInfo.sType                   = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		samplerCreateInfo.minFilter               = VK_FILTER_LINEAR;
+		samplerCreateInfo.magFilter               = VK_FILTER_LINEAR;
+		samplerCreateInfo.addressModeU            = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerCreateInfo.addressModeV            = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerCreateInfo.addressModeW            = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerCreateInfo.unnormalizedCoordinates = VK_FALSE;
+		samplerCreateInfo.compareEnable           = VK_FALSE;
+
+		m_Context.DispatchTable.createSampler(&samplerCreateInfo, nullptr, &m_Sampler);
+	}
 	CreateDepth();
 }
 
@@ -403,7 +444,7 @@ void App::CreateDepth()
 					   .SetType(VK_IMAGE_TYPE_2D)
 					   .SetAspectFlags(VK_IMAGE_ASPECT_DEPTH_BIT | help::HasStencilComponent(m_DepthFormat) *
 									   VK_IMAGE_ASPECT_STENCIL_BIT)
-					   .Build(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, false);
+					   .Build(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, false);
 	m_DepthImage = std::make_unique<vkc::Image>(std::move(image));
 
 	vkc::ImageView imageView = m_DepthImage->CreateView(m_Context, VK_IMAGE_VIEW_TYPE_2D, 0, 1, 0, 1, false);
@@ -461,68 +502,144 @@ void App::RecordCommandBuffer(vkc::CommandBuffer& commandBuffer, size_t imageInd
 		}
 		m_DepthImage->MakeTransition(m_Context, commandBuffer, transition);
 	}
-
-	VkRenderingAttachmentInfo renderingAttachmentInfo{};
-	renderingAttachmentInfo.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-	renderingAttachmentInfo.clearValue  = { { .03f, .03f, .03f, 1.f } };
-	renderingAttachmentInfo.imageLayout = m_SwapchainImages[imageIndex].GetLayout();
-	renderingAttachmentInfo.imageView   = m_SwapchainImageViews[imageIndex];
-	renderingAttachmentInfo.loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	renderingAttachmentInfo.storeOp     = VK_ATTACHMENT_STORE_OP_STORE;
-
-	VkRenderingAttachmentInfo depthAttachmentInfo{};
-	depthAttachmentInfo.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-	depthAttachmentInfo.clearValue  = { .depthStencil = { 1.0f, 0 } };
-	depthAttachmentInfo.imageLayout = m_DepthImage->GetLayout();
-	depthAttachmentInfo.imageView   = *m_DepthImageView;
-	depthAttachmentInfo.loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	depthAttachmentInfo.storeOp     = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-
-	VkRenderingInfo renderingInfo{};
-	renderingInfo.sType                = VK_STRUCTURE_TYPE_RENDERING_INFO;
-	renderingInfo.colorAttachmentCount = 1;
-	renderingInfo.pColorAttachments    = &renderingAttachmentInfo;
-	renderingInfo.pDepthAttachment     = &depthAttachmentInfo;
-	renderingInfo.layerCount           = 1;
-	renderingInfo.renderArea           = VkRect2D{ {}, m_Context.Swapchain.extent };
-
-	m_Context.DispatchTable.cmdBeginRendering(commandBuffer, &renderingInfo);
-	// main pass
+	//
 	{
-		m_Context.DispatchTable.cmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, *m_Pipeline);
-		m_Context.DispatchTable.cmdBindDescriptorSets(commandBuffer
-													  , VK_PIPELINE_BIND_POINT_GRAPHICS
-													  , *m_PipelineLayout
-													  , 0
-													  , 1
-													  , m_FrameDescriptorSets[m_CurrentFrame]
-													  , 0
-													  , nullptr);
+		VkRenderingAttachmentInfo renderingAttachmentInfo{};
+		renderingAttachmentInfo.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+		renderingAttachmentInfo.clearValue  = { { .03f, .03f, .03f, 1.f } };
+		renderingAttachmentInfo.imageLayout = m_SwapchainImages[imageIndex].GetLayout();
+		renderingAttachmentInfo.imageView   = m_SwapchainImageViews[imageIndex];
+		renderingAttachmentInfo.loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		renderingAttachmentInfo.storeOp     = VK_ATTACHMENT_STORE_OP_STORE;
 
-		VkDeviceSize offsets[] = { {} };
-		m_Context.DispatchTable.cmdBindVertexBuffers(commandBuffer
-													 , 0
-													 , 1
-													 , *m_VertexBuffer
-													 , offsets);
+		VkRenderingAttachmentInfo depthAttachmentInfo{};
+		depthAttachmentInfo.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+		depthAttachmentInfo.clearValue  = { .depthStencil = { 1.0f, 0 } };
+		depthAttachmentInfo.imageLayout = m_DepthImage->GetLayout();
+		depthAttachmentInfo.imageView   = *m_DepthImageView;
+		depthAttachmentInfo.loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		depthAttachmentInfo.storeOp     = VK_ATTACHMENT_STORE_OP_STORE;
 
-		VkViewport viewport{};
-		viewport.width    = static_cast<float>(m_Context.Swapchain.extent.width);
-		viewport.height   = static_cast<float>(m_Context.Swapchain.extent.height);
-		viewport.minDepth = 0.0f;
-		viewport.maxDepth = 1.0f;
+		VkRenderingInfo renderingInfo{};
+		renderingInfo.sType                = VK_STRUCTURE_TYPE_RENDERING_INFO;
+		renderingInfo.colorAttachmentCount = 1;
+		renderingInfo.pColorAttachments    = &renderingAttachmentInfo;
+		renderingInfo.pDepthAttachment     = &depthAttachmentInfo;
+		renderingInfo.layerCount           = 1;
+		renderingInfo.renderArea           = VkRect2D{ {}, m_Context.Swapchain.extent };
 
-		m_Context.DispatchTable.cmdSetViewport(commandBuffer, 0, 1, &viewport);
+		m_Context.DispatchTable.cmdBeginRendering(commandBuffer, &renderingInfo);
+		// main pass
+		{
+			m_Context.DispatchTable.cmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, *m_Pipeline);
+			m_Context.DispatchTable.cmdBindDescriptorSets(commandBuffer
+														  , VK_PIPELINE_BIND_POINT_GRAPHICS
+														  , *m_PipelineLayout
+														  , 0
+														  , 1
+														  , m_FrameDescriptorSets[m_CurrentFrame]
+														  , 0
+														  , nullptr);
 
-		VkRect2D scissor{};
-		scissor.offset = { 0, 0 };
-		scissor.extent = m_Context.Swapchain.extent;
+			VkDeviceSize offsets[] = { {} };
+			m_Context.DispatchTable.cmdBindVertexBuffers(commandBuffer
+														 , 0
+														 , 1
+														 , *m_VertexBuffer
+														 , offsets);
 
-		m_Context.DispatchTable.cmdSetScissor(commandBuffer, 0, 1, &scissor);
+			VkViewport viewport{};
+			viewport.width    = static_cast<float>(m_Context.Swapchain.extent.width);
+			viewport.height   = static_cast<float>(m_Context.Swapchain.extent.height);
+			viewport.minDepth = 0.0f;
+			viewport.maxDepth = 1.0f;
 
-		m_Context.DispatchTable.cmdDraw(commandBuffer, static_cast<uint32_t>(m_VertexBuffer->GetSize() / sizeof(Vertex)), 1, 0, 0);
+			m_Context.DispatchTable.cmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+			VkRect2D scissor{};
+			scissor.offset = { 0, 0 };
+			scissor.extent = m_Context.Swapchain.extent;
+
+			m_Context.DispatchTable.cmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+			m_Context.DispatchTable.cmdDraw(commandBuffer, static_cast<uint32_t>(m_VertexBuffer->GetSize() / sizeof(Vertex)), 1, 0, 0);
+		}
+		m_Context.DispatchTable.cmdEndRendering(commandBuffer);
 	}
-	m_Context.DispatchTable.cmdEndRendering(commandBuffer);
+
+	// swapchain image to attachment optimal
+	{
+		vkc::Image::Transition transition{};
+		//
+		{
+			transition.SrcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			transition.DstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			transition.SrcStageMask  = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+			transition.DstStageMask  = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+			transition.NewLayout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		}
+		swapchainImage.MakeTransition(m_Context, commandBuffer, transition);
+	}
+	// depth image to attachment optimal
+	{
+		vkc::Image::Transition transition{};
+		//
+		{
+			transition.SrcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			transition.DstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+			transition.SrcStageMask  = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+			transition.DstStageMask  = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+			transition.NewLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		}
+		m_DepthImage->MakeTransition(m_Context, commandBuffer, transition);
+	}
+	//
+	{
+		VkRenderingAttachmentInfo renderingAttachmentInfo{};
+		renderingAttachmentInfo.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+		renderingAttachmentInfo.clearValue  = { { .03f, .03f, .03f, 1.f } };
+		renderingAttachmentInfo.imageLayout = m_SwapchainImages[imageIndex].GetLayout();
+		renderingAttachmentInfo.imageView   = m_SwapchainImageViews[imageIndex];
+		renderingAttachmentInfo.loadOp      = VK_ATTACHMENT_LOAD_OP_LOAD;
+		renderingAttachmentInfo.storeOp     = VK_ATTACHMENT_STORE_OP_STORE;
+
+		VkRenderingInfo renderingInfo{};
+		renderingInfo.sType                = VK_STRUCTURE_TYPE_RENDERING_INFO;
+		renderingInfo.colorAttachmentCount = 1;
+		renderingInfo.pColorAttachments    = &renderingAttachmentInfo;
+		renderingInfo.layerCount           = 1;
+		renderingInfo.renderArea           = VkRect2D{ {}, m_Context.Swapchain.extent };
+
+		m_Context.DispatchTable.cmdBeginRendering(commandBuffer, &renderingInfo);
+		//
+		{
+			m_Context.DispatchTable.cmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, *m_SkyRenderPipeline);
+			m_Context.DispatchTable.cmdBindDescriptorSets(commandBuffer
+														  , VK_PIPELINE_BIND_POINT_GRAPHICS
+														  , *m_PipelineLayout
+														  , 0
+														  , 1
+														  , m_FrameDescriptorSets[m_CurrentFrame]
+														  , 0
+														  , nullptr);
+
+			VkViewport viewport{};
+			viewport.width    = static_cast<float>(m_Context.Swapchain.extent.width);
+			viewport.height   = static_cast<float>(m_Context.Swapchain.extent.height);
+			viewport.minDepth = 0.0f;
+			viewport.maxDepth = 1.0f;
+
+			m_Context.DispatchTable.cmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+			VkRect2D scissor{};
+			scissor.offset = { 0, 0 };
+			scissor.extent = m_Context.Swapchain.extent;
+			m_Context.DispatchTable.cmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+			m_Context.DispatchTable.cmdDraw(commandBuffer, 3, 1, 0, 0);
+		}
+		m_Context.DispatchTable.cmdEndRendering(commandBuffer);
+	}
 
 	// swapchain image to present
 	{
