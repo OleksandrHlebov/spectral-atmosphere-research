@@ -335,10 +335,18 @@ void App::CreateGraphicsPipeline()
 									 .Build();
 		m_PipelineLayout = std::make_unique<vkc::PipelineLayout>(std::move(layout));
 	}
+	// empty layout
+	{
+		vkc::PipelineLayoutBuilder builder{ m_Context };
+		vkc::PipelineLayout        layout = builder
+			.Build();
+		m_EmptyPipelineLayout = std::make_unique<vkc::PipelineLayout>(std::move(layout));
+	}
 
 	vkc::ShaderStage const vert{ m_Context, help::ReadFile("shaders/basic_transform.spv"), VK_SHADER_STAGE_VERTEX_BIT };
 	vkc::ShaderStage const frag{ m_Context, help::ReadFile("shaders/basic_color.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
 	vkc::ShaderStage const fsQuad{ m_Context, help::ReadFile("shaders/fsquad.spv"), VK_SHADER_STAGE_VERTEX_BIT };
+	vkc::ShaderStage const transmittanceLUT{ m_Context, help::ReadFile("shaders/transmittanceLUT.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
 	vkc::ShaderStage const sky{ m_Context, help::ReadFile("shaders/sky_color.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
 
 	VkFormat colorAttachmentFormats[]{ m_Context.Swapchain.image_format };
@@ -376,8 +384,8 @@ void App::CreateGraphicsPipeline()
 								 .SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
 								 .AddViewport(m_Context.Swapchain.extent)
 								 .SetPolygonMode(VK_POLYGON_MODE_FILL)
-								 .SetCullMode(VK_CULL_MODE_BACK_BIT)
-								 .SetFrontFace(VK_FRONT_FACE_CLOCKWISE)
+								 .SetCullMode(VK_CULL_MODE_NONE)
+								 .SetFrontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE)
 								 .AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
 								 .AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
 								 .AddColorBlendAttachment(colorBlendAttachment)
@@ -386,6 +394,27 @@ void App::CreateGraphicsPipeline()
 								 .AddShaderStage(sky)
 								 .Build(*m_PipelineLayout, true);
 		m_SkyRenderPipeline = std::make_unique<vkc::Pipeline>(std::move(pipeline));
+	}
+
+	//
+	{
+		VkFormat transmittanceFormat = m_TransmittanceImage->GetFormat();
+
+		vkc::PipelineBuilder builder{ m_Context };
+		vkc::Pipeline        pipeline = builder
+								 .SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+								 .AddViewport(m_TransmittanceImage->GetExtent())
+								 .SetPolygonMode(VK_POLYGON_MODE_FILL)
+								 .SetCullMode(VK_CULL_MODE_NONE)
+								 .SetFrontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE)
+								 .AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
+								 .AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
+								 .AddColorBlendAttachment(colorBlendAttachment)
+								 .SetRenderingAttachments({ &transmittanceFormat, 1 }, VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED)
+								 .AddShaderStage(fsQuad)
+								 .AddShaderStage(transmittanceLUT)
+								 .Build(*m_EmptyPipelineLayout, true);
+		m_TransmittancePipeline = std::make_unique<vkc::Pipeline>(std::move(pipeline));
 	}
 }
 
@@ -431,6 +460,25 @@ void App::CreateResources()
 		samplerCreateInfo.compareEnable           = VK_FALSE;
 
 		m_Context.DispatchTable.createSampler(&samplerCreateInfo, nullptr, &m_Sampler);
+
+		m_Context.DeletionQueue.Push([this]
+		{
+			m_Context.DispatchTable.destroySampler(m_Sampler, nullptr);
+		});
+	}
+	// create transmittance LUT image
+	{
+		vkc::ImageBuilder builder{ m_Context };
+		vkc::Image        image = builder
+						   .SetExtent(VkExtent2D{ 256, 64 })
+						   .SetFormat(VK_FORMAT_R16G16B16A16_UNORM)
+						   .SetType(VK_IMAGE_TYPE_2D)
+						   .SetAspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
+						   .Build(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+		m_TransmittanceImage = std::make_unique<vkc::Image>(std::move(image));
+
+		vkc::ImageView imageView = m_TransmittanceImage->CreateView(m_Context, VK_IMAGE_VIEW_TYPE_2D);
+		m_TransmittanceImageView = std::make_unique<vkc::ImageView>(std::move(imageView));
 	}
 	CreateDepth();
 }
@@ -449,6 +497,59 @@ void App::CreateDepth()
 
 	vkc::ImageView imageView = m_DepthImage->CreateView(m_Context, VK_IMAGE_VIEW_TYPE_2D, 0, 1, 0, 1, false);
 	m_DepthImageView         = std::make_unique<vkc::ImageView>(std::move(imageView));
+}
+
+void App::GenerateTransmittanceLUT(vkc::CommandBuffer& commandBuffer)
+{
+	//
+	{
+		vkc::Image::Transition transition{};
+		//
+		{
+			transition.SrcAccessMask = VK_ACCESS_2_NONE;
+			transition.DstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			transition.SrcStageMask  = VK_PIPELINE_STAGE_2_NONE;
+			transition.DstStageMask  = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+			transition.NewLayout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		}
+		m_TransmittanceImage->MakeTransition(m_Context, commandBuffer, transition);
+	}
+
+	VkRenderingAttachmentInfo renderingAttachmentInfo{};
+	renderingAttachmentInfo.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+	renderingAttachmentInfo.clearValue  = { { .03f, .03f, .03f, 1.f } };
+	renderingAttachmentInfo.imageLayout = m_TransmittanceImage->GetLayout();
+	renderingAttachmentInfo.imageView   = *m_TransmittanceImageView;
+	renderingAttachmentInfo.loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	renderingAttachmentInfo.storeOp     = VK_ATTACHMENT_STORE_OP_STORE;
+
+	VkRenderingInfo renderingInfo{};
+	renderingInfo.sType                = VK_STRUCTURE_TYPE_RENDERING_INFO;
+	renderingInfo.colorAttachmentCount = 1;
+	renderingInfo.pColorAttachments    = &renderingAttachmentInfo;
+	renderingInfo.layerCount           = 1;
+	renderingInfo.renderArea           = VkRect2D{ {}, m_TransmittanceImage->GetExtent() };
+	m_Context.DispatchTable.cmdBeginRendering(commandBuffer, &renderingInfo);
+	//
+	{
+		m_Context.DispatchTable.cmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, *m_TransmittancePipeline);
+
+		VkViewport viewport{};
+		viewport.width    = static_cast<float>(m_TransmittanceImage->GetExtent().width);
+		viewport.height   = static_cast<float>(m_TransmittanceImage->GetExtent().height);
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		m_Context.DispatchTable.cmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+		VkRect2D scissor{};
+		scissor.offset = { 0, 0 };
+		scissor.extent = m_TransmittanceImage->GetExtent();
+		m_Context.DispatchTable.cmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+		m_Context.DispatchTable.cmdDraw(commandBuffer, 3, 1, 0, 0);
+	}
+	m_Context.DispatchTable.cmdEndRendering(commandBuffer);
 }
 
 void App::RecreateSwapchain()
@@ -566,6 +667,8 @@ void App::RecordCommandBuffer(vkc::CommandBuffer& commandBuffer, size_t imageInd
 		}
 		m_Context.DispatchTable.cmdEndRendering(commandBuffer);
 	}
+
+	GenerateTransmittanceLUT(commandBuffer);
 
 	// swapchain image to attachment optimal
 	{

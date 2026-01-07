@@ -1,5 +1,1 @@
-#version 450
-
-void main() {
-
-}
+const float gPI = 3.14159265358;

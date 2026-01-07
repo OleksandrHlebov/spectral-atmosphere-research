@@ -33,6 +33,7 @@ set(SHADER_SOURCES
     "basic_color.frag"
     "basic_transform.vert"
     "sky_color.frag"
+    "transmittanceLUT.frag"
     "fsquad.vert")
 
 set(HEADER

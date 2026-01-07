@@ -64,7 +64,7 @@ public:
 			if (glm::vec2 const delta{ cache_xPos - xPos, cache_yPos - yPos };
 				abs(delta.x) > FLT_EPSILON || abs(delta.y) > FLT_EPSILON)
 			{
-				m_TotalYaw -= delta.x * m_Sensitivity;
+				m_TotalYaw   -= delta.x * m_Sensitivity;
 				m_TotalPitch += delta.y * m_Sensitivity;
 				m_TotalPitch = std::clamp(m_TotalPitch, -89.f, 89.f);
 
@@ -97,7 +97,7 @@ private
 :
 	void RecalculateProjection()
 	{
-		m_Projection = glm::perspective(glm::radians(m_Fov), m_AspectRatio, m_Near, m_Far);
+		m_Projection       = glm::perspective(glm::radians(m_Fov), m_AspectRatio, m_Near, m_Far);
 		m_Projection[1][1] *= -1;
 	}
 

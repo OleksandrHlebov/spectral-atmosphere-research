@@ -51,6 +51,7 @@ private:
 	void CreateDescriptorSetLayouts();
 	void CreateResources();
 	void CreateDepth();
+	void GenerateTransmittanceLUT(vkc::CommandBuffer& commandBuffer);
 	void RecreateSwapchain();
 	void RecordCommandBuffer(vkc::CommandBuffer& commandBuffer, size_t imageIndex);
 	void Submit(vkc::CommandBuffer& commandBuffer) const;
@@ -64,9 +65,14 @@ private:
 	uptr<vkc::DescriptorPool>      m_DescPool{};
 
 	uptr<vkc::PipelineLayout> m_PipelineLayout;
-	uptr<vkc::Pipeline>       m_Pipeline{};
+	uptr<vkc::PipelineLayout> m_EmptyPipelineLayout;
 
+	uptr<vkc::Pipeline> m_Pipeline{};
+	uptr<vkc::Pipeline> m_TransmittancePipeline{};
 	uptr<vkc::Pipeline> m_SkyRenderPipeline{};
+
+	uptr<vkc::Image>     m_TransmittanceImage{};
+	uptr<vkc::ImageView> m_TransmittanceImageView{};
 
 	VkFormat             m_DepthFormat{};
 	uptr<vkc::Image>     m_DepthImage{};
