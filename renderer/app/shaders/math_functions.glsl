@@ -29,3 +29,7 @@ vec2 RayIntersectSphere2D(
     (-b + sqrt(d)) / (2.0 * a)
     );
 }
+
+float safeacos(const float x) {
+    return acos(clamp(x, -1.0, 1.0));
+}

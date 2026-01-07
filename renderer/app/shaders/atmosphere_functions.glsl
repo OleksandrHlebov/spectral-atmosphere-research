@@ -76,3 +76,10 @@ vec3 ExtinctionCoef(float altitude)
     + mieScattering + mieAbsorption
     + ozoneScattering + ozoneAbsorption;
 }
+
+vec3 SampleTransmittanceLUT(sampler2D lut, float altitude, float cosTheta)
+{
+    const float u = (cosTheta + 1.f) * 0.5;
+    const float v = (altitude - gGroundRadius) / (gAtmosphereRadius - gGroundRadius);
+    return texture(lut, vec2(u, v)).xyz;
+}

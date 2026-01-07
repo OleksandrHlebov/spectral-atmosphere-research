@@ -286,9 +286,15 @@ void App::CreateDescriptorSets()
 		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		imageInfo.sampler     = m_Sampler;
 
+		VkDescriptorImageInfo transmittanceInfo{};
+		transmittanceInfo.imageView   = *m_TransmittanceImageView;
+		transmittanceInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		transmittanceInfo.sampler     = m_Sampler;
+
 		m_FrameDescriptorSets[index]
 			.AddWriteDescriptor({ &bufferInfo, 1 }, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0)
 			.AddWriteDescriptor({ &imageInfo, 1 }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, 0)
+			.AddWriteDescriptor({ &transmittanceInfo, 1 }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, 0)
 			.Update(m_Context);
 	}
 }
@@ -347,6 +353,7 @@ void App::CreateGraphicsPipeline()
 	vkc::ShaderStage const frag{ m_Context, help::ReadFile("shaders/basic_color.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
 	vkc::ShaderStage const fsQuad{ m_Context, help::ReadFile("shaders/fsquad.spv"), VK_SHADER_STAGE_VERTEX_BIT };
 	vkc::ShaderStage const transmittanceLUT{ m_Context, help::ReadFile("shaders/transmittanceLUT.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
+	vkc::ShaderStage const multScatteringLUT{ m_Context, help::ReadFile("shaders/multiple_scattering.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
 	vkc::ShaderStage const sky{ m_Context, help::ReadFile("shaders/sky_color.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
 
 	VkFormat colorAttachmentFormats[]{ m_Context.Swapchain.image_format };
@@ -416,6 +423,27 @@ void App::CreateGraphicsPipeline()
 								 .Build(*m_EmptyPipelineLayout, true);
 		m_TransmittancePipeline = std::make_unique<vkc::Pipeline>(std::move(pipeline));
 	}
+
+	//
+	{
+		VkFormat lutFormat = m_MultScatteringImage->GetFormat();
+
+		vkc::PipelineBuilder builder{ m_Context };
+		vkc::Pipeline        pipeline = builder
+								 .SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+								 .AddViewport(m_MultScatteringImage->GetExtent())
+								 .SetPolygonMode(VK_POLYGON_MODE_FILL)
+								 .SetCullMode(VK_CULL_MODE_NONE)
+								 .SetFrontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE)
+								 .AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
+								 .AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
+								 .AddColorBlendAttachment(colorBlendAttachment)
+								 .SetRenderingAttachments({ &lutFormat, 1 }, VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED)
+								 .AddShaderStage(fsQuad)
+								 .AddShaderStage(multScatteringLUT)
+								 .Build(*m_PipelineLayout, true);
+		m_MultipleScatteringPipeline = std::make_unique<vkc::Pipeline>(std::move(pipeline));
+	}
 }
 
 void App::CreateCmdPool()
@@ -432,6 +460,7 @@ void App::CreateDescriptorSetLayouts()
 	vkc::DescriptorSetLayout        layout = builder
 									  .AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
 									  .AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+									  .AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
 									  .Build();
 
 	m_FrameDescSetLayout = std::make_unique<vkc::DescriptorSetLayout>(std::move(layout));
@@ -479,6 +508,20 @@ void App::CreateResources()
 
 		vkc::ImageView imageView = m_TransmittanceImage->CreateView(m_Context, VK_IMAGE_VIEW_TYPE_2D);
 		m_TransmittanceImageView = std::make_unique<vkc::ImageView>(std::move(imageView));
+	}
+	// create multiple scattering LUT image
+	{
+		vkc::ImageBuilder builder{ m_Context };
+		vkc::Image        image = builder
+						   .SetExtent(VkExtent2D{ 32, 32 })
+						   .SetFormat(VK_FORMAT_R16G16B16A16_SFLOAT)
+						   .SetType(VK_IMAGE_TYPE_2D)
+						   .SetAspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
+						   .Build(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+		m_MultScatteringImage = std::make_unique<vkc::Image>(std::move(image));
+
+		vkc::ImageView imageView  = m_MultScatteringImage->CreateView(m_Context, VK_IMAGE_VIEW_TYPE_2D);
+		m_MultScatteringImageView = std::make_unique<vkc::ImageView>(std::move(imageView));
 	}
 	CreateDepth();
 }
@@ -545,6 +588,80 @@ void App::GenerateTransmittanceLUT(vkc::CommandBuffer& commandBuffer)
 		VkRect2D scissor{};
 		scissor.offset = { 0, 0 };
 		scissor.extent = m_TransmittanceImage->GetExtent();
+		m_Context.DispatchTable.cmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+		m_Context.DispatchTable.cmdDraw(commandBuffer, 3, 1, 0, 0);
+	}
+	m_Context.DispatchTable.cmdEndRendering(commandBuffer);
+}
+
+void App::GenerateMultScatteringLUT(vkc::CommandBuffer& commandBuffer)
+{
+	//
+	{
+		vkc::Image::Transition transition{};
+		//
+		{
+			transition.SrcAccessMask = VK_ACCESS_2_NONE;
+			transition.DstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			transition.SrcStageMask  = VK_PIPELINE_STAGE_2_NONE;
+			transition.DstStageMask  = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+			transition.NewLayout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		}
+		m_MultScatteringImage->MakeTransition(m_Context, commandBuffer, transition);
+	}
+	//
+	{
+		vkc::Image::Transition transition{};
+		//
+		{
+			transition.SrcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			transition.DstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			transition.SrcStageMask  = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+			transition.DstStageMask  = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+			transition.NewLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		}
+		m_TransmittanceImage->MakeTransition(m_Context, commandBuffer, transition);
+	}
+
+	VkRenderingAttachmentInfo renderingAttachmentInfo{};
+	renderingAttachmentInfo.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+	renderingAttachmentInfo.clearValue  = { { .03f, .03f, .03f, 1.f } };
+	renderingAttachmentInfo.imageLayout = m_MultScatteringImage->GetLayout();
+	renderingAttachmentInfo.imageView   = *m_MultScatteringImageView;
+	renderingAttachmentInfo.loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	renderingAttachmentInfo.storeOp     = VK_ATTACHMENT_STORE_OP_STORE;
+
+	VkRenderingInfo renderingInfo{};
+	renderingInfo.sType                = VK_STRUCTURE_TYPE_RENDERING_INFO;
+	renderingInfo.colorAttachmentCount = 1;
+	renderingInfo.pColorAttachments    = &renderingAttachmentInfo;
+	renderingInfo.layerCount           = 1;
+	renderingInfo.renderArea           = VkRect2D{ {}, m_MultScatteringImage->GetExtent() };
+	m_Context.DispatchTable.cmdBeginRendering(commandBuffer, &renderingInfo);
+	//
+	{
+		m_Context.DispatchTable.cmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, *m_MultipleScatteringPipeline);
+		m_Context.DispatchTable.cmdBindDescriptorSets(commandBuffer
+													  , VK_PIPELINE_BIND_POINT_GRAPHICS
+													  , *m_PipelineLayout
+													  , 0
+													  , 1
+													  , m_FrameDescriptorSets[m_CurrentFrame]
+													  , 0
+													  , nullptr);
+
+		VkViewport viewport{};
+		viewport.width    = static_cast<float>(m_MultScatteringImage->GetExtent().width);
+		viewport.height   = static_cast<float>(m_MultScatteringImage->GetExtent().height);
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		m_Context.DispatchTable.cmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+		VkRect2D scissor{};
+		scissor.offset = { 0, 0 };
+		scissor.extent = m_MultScatteringImage->GetExtent();
 		m_Context.DispatchTable.cmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 		m_Context.DispatchTable.cmdDraw(commandBuffer, 3, 1, 0, 0);
@@ -669,6 +786,7 @@ void App::RecordCommandBuffer(vkc::CommandBuffer& commandBuffer, size_t imageInd
 	}
 
 	GenerateTransmittanceLUT(commandBuffer);
+	GenerateMultScatteringLUT(commandBuffer);
 
 	// swapchain image to attachment optimal
 	{
