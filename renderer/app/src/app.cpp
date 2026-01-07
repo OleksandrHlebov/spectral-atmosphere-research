@@ -13,7 +13,7 @@
 
 App::App(int width, int height)
 {
-	m_Camera = std::make_unique<Camera>(glm::vec3(.0f, .0f, .0f)
+	m_Camera = std::make_unique<Camera>(glm::vec3(.0f, 10.f, .0f)
 										, 45.f
 										, static_cast<float>(width) / height // NOLINT(*-narrowing-conversions)
 										, .0001f
@@ -291,10 +291,22 @@ void App::CreateDescriptorSets()
 		transmittanceInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		transmittanceInfo.sampler     = m_Sampler;
 
+		VkDescriptorImageInfo multScatteringInfo{};
+		multScatteringInfo.imageView   = *m_MultScatteringImageView;
+		multScatteringInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		multScatteringInfo.sampler     = m_Sampler;
+
+		VkDescriptorImageInfo skyviewInfo{};
+		skyviewInfo.imageView   = *m_SkyviewImageView;
+		skyviewInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		skyviewInfo.sampler     = m_Sampler;
+
 		m_FrameDescriptorSets[index]
 			.AddWriteDescriptor({ &bufferInfo, 1 }, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 0)
 			.AddWriteDescriptor({ &imageInfo, 1 }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, 0)
 			.AddWriteDescriptor({ &transmittanceInfo, 1 }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, 0)
+			.AddWriteDescriptor({ &multScatteringInfo, 1 }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, 0)
+			.AddWriteDescriptor({ &skyviewInfo, 1 }, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, 0)
 			.Update(m_Context);
 	}
 }
@@ -302,9 +314,9 @@ void App::CreateDescriptorSets()
 void App::CreateVertexBuffer()
 {
 	Vertex constexpr vertices[]{
-		{ glm::vec3{ .0f, .5f, 1.f } }
-		, { glm::vec3{ .5f, -.5f, 1.f } }
-		, { glm::vec3{ -.5f, -.5f, 1.f } }
+		{ glm::vec3{ .0f, 10.5f, 1.f } }
+		, { glm::vec3{ .5f, 9.5f, 1.f } }
+		, { glm::vec3{ -.5f, 9.5f, 1.f } }
 	};
 
 	vkc::BufferBuilder stagingBufferBuilder{ m_Context };
@@ -338,6 +350,7 @@ void App::CreateGraphicsPipeline()
 		vkc::PipelineLayoutBuilder builder{ m_Context };
 		vkc::PipelineLayout        layout = builder
 									 .AddDescriptorSetLayout(*m_FrameDescSetLayout)
+									 .AddPushConstant(VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(glm::vec3) * 2 + sizeof(float) * 2)
 									 .Build();
 		m_PipelineLayout = std::make_unique<vkc::PipelineLayout>(std::move(layout));
 	}
@@ -354,6 +367,7 @@ void App::CreateGraphicsPipeline()
 	vkc::ShaderStage const fsQuad{ m_Context, help::ReadFile("shaders/fsquad.spv"), VK_SHADER_STAGE_VERTEX_BIT };
 	vkc::ShaderStage const transmittanceLUT{ m_Context, help::ReadFile("shaders/transmittanceLUT.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
 	vkc::ShaderStage const multScatteringLUT{ m_Context, help::ReadFile("shaders/multiple_scattering.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
+	vkc::ShaderStage const skyviewLUT{ m_Context, help::ReadFile("shaders/skyview.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
 	vkc::ShaderStage const sky{ m_Context, help::ReadFile("shaders/sky_color.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
 
 	VkFormat colorAttachmentFormats[]{ m_Context.Swapchain.image_format };
@@ -444,6 +458,27 @@ void App::CreateGraphicsPipeline()
 								 .Build(*m_PipelineLayout, true);
 		m_MultipleScatteringPipeline = std::make_unique<vkc::Pipeline>(std::move(pipeline));
 	}
+
+	//
+	{
+		VkFormat lutFormat = m_SkyviewImage->GetFormat();
+
+		vkc::PipelineBuilder builder{ m_Context };
+		vkc::Pipeline        pipeline = builder
+								 .SetTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
+								 .AddViewport(m_SkyviewImage->GetExtent())
+								 .SetPolygonMode(VK_POLYGON_MODE_FILL)
+								 .SetCullMode(VK_CULL_MODE_NONE)
+								 .SetFrontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE)
+								 .AddDynamicState(VK_DYNAMIC_STATE_VIEWPORT)
+								 .AddDynamicState(VK_DYNAMIC_STATE_SCISSOR)
+								 .AddColorBlendAttachment(colorBlendAttachment)
+								 .SetRenderingAttachments({ &lutFormat, 1 }, VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED)
+								 .AddShaderStage(fsQuad)
+								 .AddShaderStage(skyviewLUT)
+								 .Build(*m_PipelineLayout, true);
+		m_SkyviewPipeline = std::make_unique<vkc::Pipeline>(std::move(pipeline));
+	}
 }
 
 void App::CreateCmdPool()
@@ -461,6 +496,8 @@ void App::CreateDescriptorSetLayouts()
 									  .AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
 									  .AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
 									  .AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+									  .AddBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+									  .AddBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
 									  .Build();
 
 	m_FrameDescSetLayout = std::make_unique<vkc::DescriptorSetLayout>(std::move(layout));
@@ -522,6 +559,20 @@ void App::CreateResources()
 
 		vkc::ImageView imageView  = m_MultScatteringImage->CreateView(m_Context, VK_IMAGE_VIEW_TYPE_2D);
 		m_MultScatteringImageView = std::make_unique<vkc::ImageView>(std::move(imageView));
+	}
+	// create skyview LUT image
+	{
+		vkc::ImageBuilder builder{ m_Context };
+		vkc::Image        image = builder
+						   .SetExtent(VkExtent2D{ 200, 100 })
+						   .SetFormat(VK_FORMAT_R16G16B16A16_SFLOAT)
+						   .SetType(VK_IMAGE_TYPE_2D)
+						   .SetAspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
+						   .Build(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+		m_SkyviewImage = std::make_unique<vkc::Image>(std::move(image));
+
+		vkc::ImageView imageView = m_SkyviewImage->CreateView(m_Context, VK_IMAGE_VIEW_TYPE_2D);
+		m_SkyviewImageView       = std::make_unique<vkc::ImageView>(std::move(imageView));
 	}
 	CreateDepth();
 }
@@ -669,6 +720,102 @@ void App::GenerateMultScatteringLUT(vkc::CommandBuffer& commandBuffer)
 	m_Context.DispatchTable.cmdEndRendering(commandBuffer);
 }
 
+void App::GenerateSkyviewLUT(vkc::CommandBuffer& commandBuffer)
+{
+	//
+	{
+		vkc::Image::Transition transition{};
+		//
+		{
+			transition.SrcAccessMask = VK_ACCESS_2_NONE;
+			transition.DstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			transition.SrcStageMask  = VK_PIPELINE_STAGE_2_NONE;
+			transition.DstStageMask  = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+			transition.NewLayout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		}
+		m_SkyviewImage->MakeTransition(m_Context, commandBuffer, transition);
+	}
+	//
+	{
+		vkc::Image::Transition transition{};
+		//
+		{
+			transition.SrcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			transition.DstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			transition.SrcStageMask  = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+			transition.DstStageMask  = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+			transition.NewLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		}
+		m_TransmittanceImage->MakeTransition(m_Context, commandBuffer, transition);
+	}
+	//
+	{
+		vkc::Image::Transition transition{};
+		//
+		{
+			transition.SrcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			transition.DstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			transition.SrcStageMask  = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+			transition.DstStageMask  = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+			transition.NewLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		}
+		m_MultScatteringImage->MakeTransition(m_Context, commandBuffer, transition);
+	}
+
+	VkRenderingAttachmentInfo renderingAttachmentInfo{};
+	renderingAttachmentInfo.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+	renderingAttachmentInfo.clearValue  = { { .03f, .03f, .03f, 1.f } };
+	renderingAttachmentInfo.imageLayout = m_SkyviewImage->GetLayout();
+	renderingAttachmentInfo.imageView   = *m_SkyviewImageView;
+	renderingAttachmentInfo.loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	renderingAttachmentInfo.storeOp     = VK_ATTACHMENT_STORE_OP_STORE;
+
+	VkRenderingInfo renderingInfo{};
+	renderingInfo.sType                = VK_STRUCTURE_TYPE_RENDERING_INFO;
+	renderingInfo.colorAttachmentCount = 1;
+	renderingInfo.pColorAttachments    = &renderingAttachmentInfo;
+	renderingInfo.layerCount           = 1;
+	renderingInfo.renderArea           = VkRect2D{ {}, m_SkyviewImage->GetExtent() };
+	m_Context.DispatchTable.cmdBeginRendering(commandBuffer, &renderingInfo);
+	//
+	{
+		m_Context.DispatchTable.cmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, *m_SkyviewPipeline);
+		m_Context.DispatchTable.cmdBindDescriptorSets(commandBuffer
+													  , VK_PIPELINE_BIND_POINT_GRAPHICS
+													  , *m_PipelineLayout
+													  , 0
+													  , 1
+													  , m_FrameDescriptorSets[m_CurrentFrame]
+													  , 0
+													  , nullptr);
+
+		VkViewport viewport{};
+		viewport.width    = static_cast<float>(m_SkyviewImage->GetExtent().width);
+		viewport.height   = static_cast<float>(m_SkyviewImage->GetExtent().height);
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		m_Context.DispatchTable.cmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+		VkRect2D scissor{};
+		scissor.offset = { 0, 0 };
+		scissor.extent = m_SkyviewImage->GetExtent();
+		m_Context.DispatchTable.cmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+		glm::vec3 const cameraPosition = m_Camera->GetPosition();
+
+		m_Context.DispatchTable.cmdPushConstants(commandBuffer
+												 , *m_PipelineLayout
+												 , VK_SHADER_STAGE_FRAGMENT_BIT
+												 , 0
+												 , sizeof(glm::vec3)
+												 , &cameraPosition);
+
+		m_Context.DispatchTable.cmdDraw(commandBuffer, 3, 1, 0, 0);
+	}
+	m_Context.DispatchTable.cmdEndRendering(commandBuffer);
+}
+
 void App::RecreateSwapchain()
 {
 	if (auto const result = m_Context.DispatchTable.deviceWaitIdle();
@@ -787,7 +934,34 @@ void App::RecordCommandBuffer(vkc::CommandBuffer& commandBuffer, size_t imageInd
 
 	GenerateTransmittanceLUT(commandBuffer);
 	GenerateMultScatteringLUT(commandBuffer);
-
+	GenerateSkyviewLUT(commandBuffer);
+	//
+	{
+		vkc::Image::Transition transition{};
+		//
+		{
+			transition.SrcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			transition.DstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			transition.SrcStageMask  = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+			transition.DstStageMask  = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+			transition.NewLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		}
+		m_TransmittanceImage->MakeTransition(m_Context, commandBuffer, transition);
+		m_MultScatteringImage->MakeTransition(m_Context, commandBuffer, transition);
+	}
+	//
+	{
+		vkc::Image::Transition transition{};
+		//
+		{
+			transition.SrcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			transition.DstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			transition.SrcStageMask  = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+			transition.DstStageMask  = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+			transition.NewLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		}
+		m_SkyviewImage->MakeTransition(m_Context, commandBuffer, transition);
+	}
 	// swapchain image to attachment optimal
 	{
 		vkc::Image::Transition transition{};
@@ -856,6 +1030,25 @@ void App::RecordCommandBuffer(vkc::CommandBuffer& commandBuffer, size_t imageInd
 			scissor.offset = { 0, 0 };
 			scissor.extent = m_Context.Swapchain.extent;
 			m_Context.DispatchTable.cmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+			struct PushConstant
+			{
+				glm::vec3 CameraPosition;
+				float     Fov;
+				glm::vec3 CameraForward;
+				float     AspectRatio;
+			};
+			PushConstant pushConstant
+			{
+				m_Camera->GetPosition(), tan(glm::radians(m_Camera->GetFov() * .5f)), m_Camera->GetForward(), m_Camera->GetAspectRatio()
+			};
+
+			m_Context.DispatchTable.cmdPushConstants(commandBuffer
+													 , *m_PipelineLayout
+													 , VK_SHADER_STAGE_FRAGMENT_BIT
+													 , 0
+													 , sizeof(pushConstant)
+													 , &pushConstant);
 
 			m_Context.DispatchTable.cmdDraw(commandBuffer, 3, 1, 0, 0);
 		}

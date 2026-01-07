@@ -83,6 +83,26 @@ public:
 		RecalculateProjection();
 	}
 
+	[[nodiscard]] float GetFov() const
+	{
+		return m_Fov;
+	}
+
+	[[nodiscard]] float GetAspectRatio() const
+	{
+		return m_AspectRatio;
+	}
+
+	[[nodiscard]] glm::vec3 GetPosition() const
+	{
+		return m_Position;
+	}
+
+	[[nodiscard]] glm::vec3 GetForward() const
+	{
+		return m_Forward;
+	}
+
 	[[nodiscard]] glm::mat4 CalculateViewMatrix() const
 	{
 		return glm::lookAt(m_Position, m_Position + m_Forward, WORLD_UP);
@@ -110,7 +130,7 @@ private
 	float     m_Fov;
 	float     m_AspectRatio;
 	float     m_Speed{ 2.f };
-	float     m_Boost{ 1.f };
+	float     m_Boost{ 2000.f };
 	float     m_Sensitivity{ 0.2f };
 	float     m_Near;
 	float     m_Far;

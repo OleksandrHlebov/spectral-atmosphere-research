@@ -35,6 +35,7 @@ set(SHADER_SOURCES
     "sky_color.frag"
     "transmittanceLUT.frag"
     "multiple_scattering.frag"
+    "skyview.frag"
     "fsquad.vert")
 
 set(HEADER

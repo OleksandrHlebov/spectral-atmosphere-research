@@ -52,16 +52,17 @@ void CalculateMultipleScattering(vec3 position, vec3 sunDirection, out vec3 tota
             t = newT;
 
             const vec3 newPosition = position + t * rayDirection;
-            const float mieScattering = MieScattering(FindAltitude(position));
-            const vec3 rayleighScattering = RayleighScattering(FindAltitude(position));
-            const vec3 extinction = ExtinctionCoef(FindAltitude(position));
+            const float newAltitude = FindAltitude(newPosition);
+            const float mieScattering = MieScattering(newAltitude);
+            const vec3 rayleighScattering = RayleighScattering(newAltitude);
+            const vec3 extinction = ExtinctionCoef(newAltitude);
             const vec3 stepTransmittance = exp(-deltaT * extinction);
 
             const vec3 scatteringNoPhase = rayleighScattering + mieScattering;
             const vec3 scatteringF = (scatteringNoPhase - scatteringNoPhase * stepTransmittance) / extinction;
             luminanceFactor += transmittance * scatteringF;
 
-            const vec3 sunTransmittance = SampleTransmittanceLUT(transmittanceImage, FindAltitude(newPosition), cosTheta);
+            const vec3 sunTransmittance = SampleLUT(transmittanceImage, newAltitude, cosTheta);
             const vec3 rayleighInScattering = rayleighScattering * rayleighPhase;
             const float mieInScattering = mieScattering * miePhase;
             const vec3 totalInScattering = (rayleighInScattering + mieInScattering) * sunTransmittance;
@@ -80,7 +81,7 @@ void CalculateMultipleScattering(vec3 position, vec3 sunDirection, out vec3 tota
                 const vec3 groundNormal = normalize(position + distanceToGround * rayDirection);
                 const vec3 groundPosition = groundNormal * gGroundRadius;
                 const float cosTheta = dot(groundNormal, sunDirection);
-                luminance += transmittance * gGroundAlbedo * SampleTransmittanceLUT(transmittanceImage, FindAltitude(groundPosition), cosTheta);
+                luminance += transmittance * gGroundAlbedo * SampleLUT(transmittanceImage, FindAltitude(groundPosition), cosTheta);
             }
         }
 

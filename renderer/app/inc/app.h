@@ -53,6 +53,7 @@ private:
 	void CreateDepth();
 	void GenerateTransmittanceLUT(vkc::CommandBuffer& commandBuffer);
 	void GenerateMultScatteringLUT(vkc::CommandBuffer& commandBuffer);
+	void GenerateSkyviewLUT(vkc::CommandBuffer& commandBuffer);
 	void RecreateSwapchain();
 	void RecordCommandBuffer(vkc::CommandBuffer& commandBuffer, size_t imageIndex);
 	void Submit(vkc::CommandBuffer& commandBuffer) const;
@@ -71,7 +72,11 @@ private:
 	uptr<vkc::Pipeline> m_Pipeline{};
 	uptr<vkc::Pipeline> m_TransmittancePipeline{};
 	uptr<vkc::Pipeline> m_MultipleScatteringPipeline{};
+	uptr<vkc::Pipeline> m_SkyviewPipeline{};
 	uptr<vkc::Pipeline> m_SkyRenderPipeline{};
+
+	uptr<vkc::Image>     m_SkyviewImage{};
+	uptr<vkc::ImageView> m_SkyviewImageView{};
 
 	uptr<vkc::Image>     m_MultScatteringImage{};
 	uptr<vkc::ImageView> m_MultScatteringImageView{};

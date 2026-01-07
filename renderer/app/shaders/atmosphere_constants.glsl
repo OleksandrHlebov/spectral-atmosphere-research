@@ -14,4 +14,5 @@ const vec3 gOzoneAbsorptionCoef = vec3(.650f, 1.881f, .085f) * 1e-3;
 
 const int gOpticalDepthSamples = 40;
 const int gMultipleScatteringSamples = 20;
+const int gScatteringSamples = 20;
 const int gSqrtSamples = 8;
