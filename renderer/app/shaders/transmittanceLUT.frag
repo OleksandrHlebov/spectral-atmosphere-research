@@ -5,10 +5,15 @@
 layout (location = 0) in vec2 inUV;
 
 layout (location = 0) out vec4 outColor;
-
+// TODO: rewrite as in reference https://www.shadertoy.com/view/fd2fWc
 vec3 TransmittanceExponent(vec3 position, float cosTheta)
 {
-    const vec3 direction = vec3(sqrt(1.f - pow(cosTheta, 2)), cosTheta, .0f);
+    const float sinTheta = sqrt(max(0.f, 1.f - cosTheta * cosTheta));
+    const vec3 direction = vec3(.0f, cosTheta, -sinTheta);
+
+    if (RayIntersectSphere(position, direction, gGroundRadius) > 0.0) {
+        return vec3(1e10);
+    }
 
     const float distanceToExit = RayIntersectSphere(position, direction, gAtmosphereRadius);
     const float distancePerStep = distanceToExit / gOpticalDepthSamples;
@@ -30,14 +35,38 @@ vec3 TransmittanceExponent(vec3 position, float cosTheta)
 
 vec3 CalculateTransmittance(vec3 position, float cosTheta)
 {
-    return exp(-TransmittanceExponent(position, cosTheta));
+    //    return exp(-TransmittanceExponent(position, cosTheta));
+    const float sinTheta = sqrt(max(0.f, 1.f - cosTheta * cosTheta));
+    const vec3 direction = vec3(.0f, cosTheta, -sinTheta);
+    if (RayIntersectSphere(position, direction, gGroundRadius) > 0.0) {
+        return vec3(.0f);
+    }
+
+    const float distanceToAtmosphere = RayIntersectSphere(position, direction, gAtmosphereRadius);
+
+    float t = .0f;
+    vec3 transmittance = vec3(1.f);
+    for (float step = 0.f; step < gOpticalDepthSamples; ++step)
+    {
+        const float newT = ((step + .3f) / gOpticalDepthSamples) * distanceToAtmosphere;
+        const float deltaT = newT - t;
+        t = newT;
+
+        const vec3 newPosition = position + t * direction;
+        const float newAltitude = FindAltitude(newPosition);
+        const vec3 rayleighScattering = RayleighScattering(newAltitude);
+        const float mieScattering = MieScattering(newAltitude);
+        const vec3 extinction = ExtinctionCoef(newAltitude);
+
+        transmittance *= exp(-deltaT * extinction);
+    }
+    return transmittance;
 }
 
 void main()
 {
     const float cosTheta = 2.f * inUV.x - 1.f;
     const float altitude = mix(gGroundRadius, gAtmosphereRadius, inUV.y);
-
     const vec3 position = vec3(.0f, altitude, .0f);
 
     outColor = vec4(CalculateTransmittance(position, cosTheta), 1.f);

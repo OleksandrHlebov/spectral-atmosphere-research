@@ -97,6 +97,8 @@ void App::CreateWindow(int width, int height)
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 	m_Context.Window = glfwCreateWindow(width, height, "Base window", nullptr, nullptr);
+	glfwSetWindowUserPointer(m_Context.Window, this);
+	glfwSetKeyCallback(m_Context.Window, &App::KeyCallback);
 	m_Context.DeletionQueue.Push([this]
 	{
 		glfwDestroyWindow(m_Context.Window);
@@ -314,9 +316,9 @@ void App::CreateDescriptorSets()
 void App::CreateVertexBuffer()
 {
 	Vertex constexpr vertices[]{
-		{ glm::vec3{ .0f, 10.5f, 1.f } }
-		, { glm::vec3{ .5f, 9.5f, 1.f } }
-		, { glm::vec3{ -.5f, 9.5f, 1.f } }
+		{ glm::vec3{ .0f, 10.5f, 10.f } }
+		, { glm::vec3{ .5f, 9.5f, 10.f } }
+		, { glm::vec3{ -.5f, 9.5f, 10.f } }
 	};
 
 	vkc::BufferBuilder stagingBufferBuilder{ m_Context };
@@ -350,7 +352,9 @@ void App::CreateGraphicsPipeline()
 		vkc::PipelineLayoutBuilder builder{ m_Context };
 		vkc::PipelineLayout        layout = builder
 									 .AddDescriptorSetLayout(*m_FrameDescSetLayout)
-									 .AddPushConstant(VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(glm::vec3) * 2 + sizeof(float) * 2)
+									 .AddPushConstant(VK_SHADER_STAGE_FRAGMENT_BIT
+													  , 0
+													  , sizeof(glm::vec3) * 2 + sizeof(float) * 3 + sizeof(uint32_t))
 									 .Build();
 		m_PipelineLayout = std::make_unique<vkc::PipelineLayout>(std::move(layout));
 	}
@@ -519,9 +523,9 @@ void App::CreateResources()
 		samplerCreateInfo.sType                   = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 		samplerCreateInfo.minFilter               = VK_FILTER_LINEAR;
 		samplerCreateInfo.magFilter               = VK_FILTER_LINEAR;
-		samplerCreateInfo.addressModeU            = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		samplerCreateInfo.addressModeV            = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		samplerCreateInfo.addressModeW            = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerCreateInfo.addressModeU            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerCreateInfo.addressModeV            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerCreateInfo.addressModeW            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 		samplerCreateInfo.unnormalizedCoordinates = VK_FALSE;
 		samplerCreateInfo.compareEnable           = VK_FALSE;
 
@@ -564,7 +568,7 @@ void App::CreateResources()
 	{
 		vkc::ImageBuilder builder{ m_Context };
 		vkc::Image        image = builder
-						   .SetExtent(VkExtent2D{ 200, 100 })
+						   .SetExtent(VkExtent2D{ 400, 200 })
 						   .SetFormat(VK_FORMAT_R16G16B16A16_SFLOAT)
 						   .SetType(VK_IMAGE_TYPE_2D)
 						   .SetAspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
@@ -802,14 +806,26 @@ void App::GenerateSkyviewLUT(vkc::CommandBuffer& commandBuffer)
 		scissor.extent = m_SkyviewImage->GetExtent();
 		m_Context.DispatchTable.cmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-		glm::vec3 const cameraPosition = m_Camera->GetPosition();
+		struct PushConstant
+		{
+			glm::vec3 CameraPosition;
+			float     Fov;
+			glm::vec3 CameraForward;
+			float     AspectRatio;
+			float     Time;
+		};
+		PushConstant pushConstant
+		{
+			m_Camera->GetPosition(), tan(glm::radians(m_Camera->GetFov() * .5f)), m_Camera->GetForward(), m_Camera->GetAspectRatio()
+			, world_time::GetRunTime()
+		};
 
 		m_Context.DispatchTable.cmdPushConstants(commandBuffer
 												 , *m_PipelineLayout
 												 , VK_SHADER_STAGE_FRAGMENT_BIT
 												 , 0
-												 , sizeof(glm::vec3)
-												 , &cameraPosition);
+												 , sizeof(pushConstant)
+												 , &pushConstant);
 
 		m_Context.DispatchTable.cmdDraw(commandBuffer, 3, 1, 0, 0);
 	}
@@ -1037,10 +1053,13 @@ void App::RecordCommandBuffer(vkc::CommandBuffer& commandBuffer, size_t imageInd
 				float     Fov;
 				glm::vec3 CameraForward;
 				float     AspectRatio;
+				float     Time;
+				uint32_t  UseSkyView;
 			};
 			PushConstant pushConstant
 			{
 				m_Camera->GetPosition(), tan(glm::radians(m_Camera->GetFov() * .5f)), m_Camera->GetForward(), m_Camera->GetAspectRatio()
+				, world_time::GetRunTime(), m_UseSkyview
 			};
 
 			m_Context.DispatchTable.cmdPushConstants(commandBuffer

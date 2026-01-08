@@ -3,19 +3,18 @@
 #include "math_functions.glsl"
 #include "atmosphere_constants.glsl"
 
-float MiePhase(float theta)
+float MiePhase(float cosTheta)
 {
     const float strength = .8f; // relative strength of forward/backward scattering; default = 0.8
-    const float cosTheta = cos(theta);
 
     const float numerator = 3 * (1 - pow(strength, 2)) * (1 + pow(cosTheta, 2));
-    const float denom = 8 * gPI * (2 + pow(strength, 2)) * pow((1 + pow(cosTheta, 2) - 2 * strength * cosTheta), 1.5f);
+    const float denom = 8 * gPI * (2 + pow(strength, 2)) * pow(1 + pow(strength, 2) - 2 * strength * cosTheta, 1.5f);
     return numerator / denom;
 }
 
-float RayleighPhase(float theta)
+float RayleighPhase(float cosTheta)
 {
-    return 3 * (1 + pow(cos(theta), 2)) / (16 * gPI);
+    return 3 * (1 + pow(cosTheta, 2)) / (16 * gPI);
 }
 
 float RayleighDensity(float altitude)
@@ -77,11 +76,28 @@ vec3 ExtinctionCoef(float altitude)
     + ozoneScattering + ozoneAbsorption;
 }
 
+float GetSunAltitude(float time)
+{
+    const float halfPeriod = 60.f;
+    const float beginOffset = .4f;
+    return -gPI * time / halfPeriod + beginOffset;
+}
+
 vec3 SampleLUT(sampler2D lut, float altitude, float cosTheta)
 {
-    const float u = .5f + .5f * cosTheta;
-    const float v = max(0, min((altitude - gGroundRadius) / (gAtmosphereRadius - gGroundRadius), 1));
+    const float u = clamp(.5f + .5f * cosTheta, .0f, 1.f);
+    const float v = clamp(altitude / (gAtmosphereRadius - gGroundRadius), .0f, 1.f);
     return texture(lut, vec2(u, v)).xyz;
+}
+
+vec3 SampleLUT(sampler2D lut, vec3 position, vec3 sunDirection)
+{
+    const float height = length(position);
+    const vec3 up = position / height;
+    const float cosTheta = dot(sunDirection, up);
+    const float u = clamp(.5f + .5f * cosTheta, .0f, 1.f);
+    const float v = clamp((height - gGroundRadius) / (gAtmosphereRadius - gGroundRadius), 0., 1.);
+    return texture(lut, vec2(u, v)).rgb;
 }
 
 vec3 FindSkyScattering(sampler2D transmittanceImage, sampler2D multipleScatteringImage
@@ -104,7 +120,7 @@ vec3 FindSkyScattering(sampler2D transmittanceImage, sampler2D multipleScatterin
     const vec3 rayStart = viewPosition + minDistance * rayDirection;
     const float cosTheta = dot(rayDirection, sunDirection);
     const float miePhase = MiePhase(cosTheta);
-    const float rayleighPhase = RayleighPhase(cosTheta);
+    const float rayleighPhase = RayleighPhase(-cosTheta);
 
     vec3 luminance = vec3(.0f);
     vec3 transmittance = vec3(1.f);
@@ -116,15 +132,19 @@ vec3 FindSkyScattering(sampler2D transmittanceImage, sampler2D multipleScatterin
         t = newT;
 
         const vec3 position = rayStart + t * rayDirection;
-        const float altitude = max(1e-6f, FindAltitude(position));
+
+        const float altitude = max(.0f, FindAltitude(position));
 
         const float mieScattering = MieScattering(altitude);
         const vec3 rayleighScattering = RayleighScattering(altitude);
-        const vec3 extinction = max(vec3(.001f), ExtinctionCoef(altitude));
+        const vec3 extinction = ExtinctionCoef(altitude);
 
         const vec3 stepTransmittance = exp(-deltaT * extinction);
-        const vec3 sunTransmittance = SampleLUT(transmittanceImage, altitude, cosTheta);
-        const vec3 psims = SampleLUT(multipleScatteringImage, altitude, cosTheta);
+        const vec3 up = normalize(position);
+        const float sunZenithCosAngle = dot(sunDirection, up);
+
+        const vec3 sunTransmittance = SampleLUT(transmittanceImage, altitude, sunZenithCosAngle);
+        const vec3 psims = SampleLUT(multipleScatteringImage, altitude, sunZenithCosAngle);
 
         const vec3 rayleighInScattering = rayleighScattering * (rayleighPhase * sunTransmittance + psims);
         const vec3 mieInScattering = mieScattering * (miePhase * sunTransmittance + psims);
@@ -136,6 +156,6 @@ vec3 FindSkyScattering(sampler2D transmittanceImage, sampler2D multipleScatterin
 
         transmittance *= stepTransmittance;
     }
-
     return luminance;
 }
+

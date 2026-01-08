@@ -36,30 +36,39 @@ public:
 
 	void Run();
 
-private:
-	void CreateWindow(int width, int height);
-	void CreateInstance();
-	void CreateSurface();
-	void CreateDevice();
-	void CreateSwapchain();
-	void CreateSyncObjects();
-	void CreateDescriptorPool();
-	void CreateDescriptorSets();
-	void CreateVertexBuffer();
-	void CreateGraphicsPipeline();
-	void CreateCmdPool();
-	void CreateDescriptorSetLayouts();
-	void CreateResources();
-	void CreateDepth();
-	void GenerateTransmittanceLUT(vkc::CommandBuffer& commandBuffer);
-	void GenerateMultScatteringLUT(vkc::CommandBuffer& commandBuffer);
-	void GenerateSkyviewLUT(vkc::CommandBuffer& commandBuffer);
-	void RecreateSwapchain();
-	void RecordCommandBuffer(vkc::CommandBuffer& commandBuffer, size_t imageIndex);
-	void Submit(vkc::CommandBuffer& commandBuffer) const;
-	void Present(uint32_t imageIndex);
-	void End();
+	static void KeyCallback(GLFWwindow* window, int key, int, int action, int)
+	{
+		auto app = static_cast<App*>(glfwGetWindowUserPointer(window));
 
+		if (key == GLFW_KEY_F1 && action == GLFW_PRESS)
+		{
+			app->m_UseSkyview = !app->m_UseSkyview;
+		}
+	}
+
+private:
+	void         CreateWindow(int width, int height);
+	void         CreateInstance();
+	void         CreateSurface();
+	void         CreateDevice();
+	void         CreateSwapchain();
+	void         CreateSyncObjects();
+	void         CreateDescriptorPool();
+	void         CreateDescriptorSets();
+	void         CreateVertexBuffer();
+	void         CreateGraphicsPipeline();
+	void         CreateCmdPool();
+	void         CreateDescriptorSetLayouts();
+	void         CreateResources();
+	void         CreateDepth();
+	void         GenerateTransmittanceLUT(vkc::CommandBuffer& commandBuffer);
+	void         GenerateMultScatteringLUT(vkc::CommandBuffer& commandBuffer);
+	void         GenerateSkyviewLUT(vkc::CommandBuffer& commandBuffer);
+	void         RecreateSwapchain();
+	void         RecordCommandBuffer(vkc::CommandBuffer& commandBuffer, size_t imageIndex);
+	void         Submit(vkc::CommandBuffer& commandBuffer) const;
+	void         Present(uint32_t imageIndex);
+	void         End();
 	uptr<Camera> m_Camera;
 	vkc::Context m_Context{};
 
@@ -105,6 +114,8 @@ private:
 
 	uint32_t m_FramesInFlight{};
 	uint32_t m_CurrentFrame{};
+
+	bool m_UseSkyview{ true };
 };
 
 #endif //APP_H

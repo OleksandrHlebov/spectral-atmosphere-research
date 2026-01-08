@@ -13,10 +13,10 @@ layout (binding = 2) uniform sampler2D transmittanceImage;
 
 vec3 FindSphericalDirection(float theta, float phi)
 {
-    float cosPhi = cos(phi);
-    float sinPhi = sin(phi);
-    float cosTheta = cos(theta);
-    float sinTheta = sin(theta);
+    const float cosPhi = cos(phi);
+    const float sinPhi = sin(phi);
+    const float cosTheta = cos(theta);
+    const float sinTheta = sin(theta);
     return vec3(sinPhi * sinTheta, cosPhi, sinPhi * cosTheta);
 }
 
@@ -55,14 +55,16 @@ void CalculateMultipleScattering(vec3 position, vec3 sunDirection, out vec3 tota
             const float newAltitude = FindAltitude(newPosition);
             const float mieScattering = MieScattering(newAltitude);
             const vec3 rayleighScattering = RayleighScattering(newAltitude);
-            const vec3 extinction = ExtinctionCoef(newAltitude);
+            const vec3 extinction = max(ExtinctionCoef(newAltitude), vec3(1e-8));
             const vec3 stepTransmittance = exp(-deltaT * extinction);
 
             const vec3 scatteringNoPhase = rayleighScattering + mieScattering;
             const vec3 scatteringF = (scatteringNoPhase - scatteringNoPhase * stepTransmittance) / extinction;
             luminanceFactor += transmittance * scatteringF;
 
-            const vec3 sunTransmittance = SampleLUT(transmittanceImage, newAltitude, cosTheta);
+            const vec3 up = normalize(newPosition);
+            const float sunZenithCosAngle = dot(sunDirection, up);
+            const vec3 sunTransmittance = SampleLUT(transmittanceImage, newAltitude, sunZenithCosAngle);
             const vec3 rayleighInScattering = rayleighScattering * rayleighPhase;
             const float mieInScattering = mieScattering * miePhase;
             const vec3 totalInScattering = (rayleighInScattering + mieInScattering) * sunTransmittance;
@@ -76,9 +78,9 @@ void CalculateMultipleScattering(vec3 position, vec3 sunDirection, out vec3 tota
         // calculate ground's contribution to luminance
         if (distanceToGround > .0f)
         {
-            if (dot(position, sunDirection) > .0f) // sunlit or not
+            const vec3 groundNormal = normalize(position + distanceToGround * rayDirection);
+            if (dot(groundNormal, sunDirection) > .0f) // sunlit or not
             {
-                const vec3 groundNormal = normalize(position + distanceToGround * rayDirection);
                 const vec3 groundPosition = groundNormal * gGroundRadius;
                 const float cosTheta = dot(groundNormal, sunDirection);
                 luminance += transmittance * gGroundAlbedo * SampleLUT(transmittanceImage, FindAltitude(groundPosition), cosTheta);
@@ -94,11 +96,10 @@ void main()
 {
     const float cosTheta = 2.f * inUV.x - 1.f;
     const float theta = safeacos(cosTheta);
-    const float altitude = mix(gGroundRadius, gAtmosphereRadius, inUV.y);
+    const float height = mix(gGroundRadius, gAtmosphereRadius, inUV.y);
 
-    const vec3 position = vec3(.0f, altitude, .0f);
-    const vec3 up = vec3(.0f, 1.f, .0f);
-    const vec3 lightDirection = vec3(sqrt(1.f - pow(cosTheta, 2.f)), cosTheta, .0f);
+    const vec3 position = vec3(.0f, height, .0f);
+    const vec3 lightDirection = vec3(.0f, cosTheta, -sin(theta));
 
     vec3 luminance, fms;
     CalculateMultipleScattering(position, lightDirection, luminance, fms);

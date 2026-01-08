@@ -5,6 +5,7 @@ namespace world_time
 {
 	float GetElapsedSec();
 	void  Tick();
+	float GetRunTime();
 }
 
 #endif //WORLDTIME_H
