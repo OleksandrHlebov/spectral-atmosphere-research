@@ -3,7 +3,7 @@
 
 int main()
 {
-	App app{ 640, 480 };
+	App app{ 1024, 1024 };
 
 	app.Run();
 	return 0;

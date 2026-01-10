@@ -1,9 +1,11 @@
 #version 450
 #extension GL_GOOGLE_include_directive: require
-#include "atmosphere_functions.glsl"
+#include "spectral_functions.glsl"
 
 // slightly modified version of:
 // https://www.shadertoy.com/view/fd2fWc
+
+layout (constant_id = 0) const bool spectral = false;
 
 layout (location = 0) in vec2 inUV;
 
@@ -20,10 +22,10 @@ vec3 FindSphericalDirection(float theta, float phi)
     return vec3(sinPhi * sinTheta, cosPhi, sinPhi * cosTheta);
 }
 
-void CalculateMultipleScattering(vec3 position, vec3 sunDirection, out vec3 totalLuminance, out vec3 fms)
+void CalculateMultipleScattering(vec3 position, vec3 sunDirection, out vec4 totalLuminance, out vec4 fms)
 {
-    totalLuminance = vec3(.0f);
-    fms = vec3(.0f);
+    totalLuminance = vec4(.0f);
+    fms = vec4(.0f);
     float invSamples = 1.0 / float(gSqrtSamples * gSqrtSamples);
 
     for (int x = 0; x < gSqrtSamples; ++x)
@@ -41,9 +43,9 @@ void CalculateMultipleScattering(vec3 position, vec3 sunDirection, out vec3 tota
         const float miePhase = MiePhase(cosTheta);
         const float rayleighPhase = RayleighPhase(cosTheta);
 
-        vec3 luminance = vec3(.0f);
-        vec3 luminanceFactor = vec3(.0f);
-        vec3 transmittance = vec3(1.f);
+        vec4 luminance = vec4(.0f);
+        vec4 luminanceFactor = vec4(.0f);
+        vec4 transmittance = vec4(1.f);
         float t = .0f;
         for (float step = .0f; step < float(gMultipleScatteringSamples); step += 1.f)
         {
@@ -54,22 +56,22 @@ void CalculateMultipleScattering(vec3 position, vec3 sunDirection, out vec3 tota
             const vec3 newPosition = position + t * rayDirection;
             const float newAltitude = FindAltitude(newPosition);
             const float mieScattering = MieScattering(newAltitude);
-            const vec3 rayleighScattering = RayleighScattering(newAltitude);
-            const vec3 extinction = max(ExtinctionCoef(newAltitude), vec3(1e-8));
-            const vec3 stepTransmittance = exp(-deltaT * extinction);
+            const vec4 rayleighScattering = spectral ? GetMolecularScatteringCoef(newAltitude) : vec4(RayleighScattering(newAltitude), .0f);
+            const vec4 extinction = spectral ? SpectralExtinctionCoef(newAltitude) : vec4(ExtinctionCoef(newAltitude), .0f);
+            const vec4 stepTransmittance = exp(-deltaT * extinction);
 
-            const vec3 scatteringNoPhase = rayleighScattering + mieScattering;
-            const vec3 scatteringF = (scatteringNoPhase - scatteringNoPhase * stepTransmittance) / extinction;
+            const vec4 scatteringNoPhase = rayleighScattering + mieScattering;
+            const vec4 scatteringF = (scatteringNoPhase - scatteringNoPhase * stepTransmittance) / extinction;
             luminanceFactor += transmittance * scatteringF;
 
             const vec3 up = normalize(newPosition);
             const float sunZenithCosAngle = dot(sunDirection, up);
-            const vec3 sunTransmittance = SampleLUT(transmittanceImage, newAltitude, sunZenithCosAngle);
-            const vec3 rayleighInScattering = rayleighScattering * rayleighPhase;
+            const vec4 sunTransmittance = SampleLUT(transmittanceImage, newAltitude, sunZenithCosAngle);
+            const vec4 rayleighInScattering = rayleighScattering * rayleighPhase;
             const float mieInScattering = mieScattering * miePhase;
-            const vec3 totalInScattering = (rayleighInScattering + mieInScattering) * sunTransmittance;
+            const vec4 totalInScattering = (rayleighInScattering + mieInScattering) * sunTransmittance;
 
-            const vec3 scatteringIntegral = (totalInScattering - totalInScattering * stepTransmittance) / extinction;
+            const vec4 scatteringIntegral = (totalInScattering - totalInScattering * stepTransmittance) / extinction;
 
             luminance += scatteringIntegral * transmittance;
             transmittance *= stepTransmittance;
@@ -101,9 +103,9 @@ void main()
     const vec3 position = vec3(.0f, height, .0f);
     const vec3 lightDirection = vec3(.0f, cosTheta, -sin(theta));
 
-    vec3 luminance, fms;
+    vec4 luminance, fms;
     CalculateMultipleScattering(position, lightDirection, luminance, fms);
 
-    const vec3 psi = luminance / (1.f - fms);
-    outColor = vec4(psi, 1.f);
+    const vec4 psi = luminance / (1.f - fms);
+    outColor = psi;
 }

@@ -130,7 +130,7 @@ private
 	float     m_Fov;
 	float     m_AspectRatio;
 	float     m_Speed{ 2.f };
-	float     m_Boost{ 50000.f };
+	float     m_Boost{ 1000000.f };
 	float     m_Sensitivity{ 0.2f };
 	float     m_Near;
 	float     m_Far;

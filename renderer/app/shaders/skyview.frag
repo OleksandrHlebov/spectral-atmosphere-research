@@ -1,6 +1,8 @@
 #version 450
 #extension GL_GOOGLE_include_directive: require
-#include "atmosphere_functions.glsl"
+#include "spectral_functions.glsl"
+
+layout (constant_id = 0) const bool spectral = false;
 
 layout (location = 0) in vec2 inUV;
 
@@ -38,7 +40,7 @@ void main()
 
     const float sunAltitude = gPI + GetSunAltitude(Time);
     const vec3 sunDirection = normalize(vec3(.0f, sin(sunAltitude), -cos(sunAltitude)));
-    const vec3 luminance = FindSkyScattering(transmittanceImage, multipleScatteringImage, planetRelativePosition, rayDirection, sunDirection);
+    const vec3 luminance = FindSkyScattering(transmittanceImage, multipleScatteringImage, planetRelativePosition, rayDirection, sunDirection, spectral);
 
     outColor = vec4(luminance, 1.f);
 }

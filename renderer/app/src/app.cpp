@@ -13,7 +13,7 @@
 
 App::App(int width, int height)
 {
-	m_Camera = std::make_unique<Camera>(glm::vec3(.0f, 10.f, .0f)
+	m_Camera = std::make_unique<Camera>(glm::vec3(.0f, 1000.f, .0f)
 										, 45.f
 										, static_cast<float>(width) / height // NOLINT(*-narrowing-conversions)
 										, .0001f
@@ -366,13 +366,19 @@ void App::CreateGraphicsPipeline()
 		m_EmptyPipelineLayout = std::make_unique<vkc::PipelineLayout>(std::move(layout));
 	}
 
+	bool const useSpectral{ true };
+
 	vkc::ShaderStage const vert{ m_Context, help::ReadFile("shaders/basic_transform.spv"), VK_SHADER_STAGE_VERTEX_BIT };
 	vkc::ShaderStage const frag{ m_Context, help::ReadFile("shaders/basic_color.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
 	vkc::ShaderStage const fsQuad{ m_Context, help::ReadFile("shaders/fsquad.spv"), VK_SHADER_STAGE_VERTEX_BIT };
-	vkc::ShaderStage const transmittanceLUT{ m_Context, help::ReadFile("shaders/transmittanceLUT.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
-	vkc::ShaderStage const multScatteringLUT{ m_Context, help::ReadFile("shaders/multiple_scattering.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
-	vkc::ShaderStage const skyviewLUT{ m_Context, help::ReadFile("shaders/skyview.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
-	vkc::ShaderStage const sky{ m_Context, help::ReadFile("shaders/sky_color.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
+	vkc::ShaderStage       transmittanceLUT{ m_Context, help::ReadFile("shaders/transmittanceLUT.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
+	transmittanceLUT.AddSpecializationConstant(static_cast<uint32_t>(useSpectral));
+	vkc::ShaderStage multScatteringLUT{ m_Context, help::ReadFile("shaders/multiple_scattering.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
+	multScatteringLUT.AddSpecializationConstant(static_cast<uint32_t>(useSpectral));
+	vkc::ShaderStage skyviewLUT{ m_Context, help::ReadFile("shaders/skyview.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
+	skyviewLUT.AddSpecializationConstant(static_cast<uint32_t>(useSpectral));
+	vkc::ShaderStage sky{ m_Context, help::ReadFile("shaders/sky_color.spv"), VK_SHADER_STAGE_FRAGMENT_BIT };
+	sky.AddSpecializationConstant(static_cast<uint32_t>(useSpectral));
 
 	VkFormat colorAttachmentFormats[]{ m_Context.Swapchain.image_format };
 

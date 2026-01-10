@@ -1,6 +1,8 @@
 #version 450
 #extension GL_GOOGLE_include_directive: require
-#include "atmosphere_functions.glsl"
+#include "spectral_functions.glsl"
+
+layout (constant_id = 0) const bool spectral = false;
 
 layout (location = 0) in vec2 inUV;
 
@@ -22,6 +24,22 @@ vec3 jodieReinhardTonemap(vec3 c) {
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
     vec3 tc = c / (c + 1.0);
     return mix(c / (l + 1.0), tc, tc);
+}
+
+vec3 GammaCorrect(vec3 linear_srgb)
+{
+    vec3 a = 12.92 * linear_srgb;
+    vec3 b = 1.055 * pow(linear_srgb, vec3(1.0 / 2.4)) - 0.055;
+    vec3 c = step(vec3(0.0031308), linear_srgb);
+    return mix(a, b, c);
+}
+
+vec3 SimpleToneMap(vec3 color)
+{
+    const float k = 0.05;
+    color = 1.0 - exp(-k * color);
+    //    color = clamp(GammaCorrect(color), 0.0, 1.0);
+    return color;
 }
 
 layout (location = 0) out vec4 outColor;
@@ -66,12 +84,13 @@ void main()
 
         vec3 color;
         if (cameraHeight > gAtmosphereRadius || !UseSkyview)
-        color = jodieReinhardTonemap(FindSkyScattering(transmittanceImage, multipleScatteringImage
-                                     , planetRelativePosition, rayDirection, sunDirection));
+        color = SimpleToneMap(FindSkyScattering(transmittanceImage, multipleScatteringImage
+                              , planetRelativePosition, rayDirection, sunDirection, spectral));
         else
-        color = jodieReinhardTonemap(SampleSkyviewLUT(rayDirection, sunDirection));
+        color = SimpleToneMap(SampleSkyviewLUT(rayDirection, sunDirection));
 
-        outColor = vec4(pow(color, vec3(1.0 / 2.2)), 1.f);
+        outColor = vec4(color, 1.f);
+
     }
     else discard;
 }

@@ -49,12 +49,12 @@ vec3 FindPlanetRelativePosition(vec3 worldPosition)
 
 float FindAltitudeAtWorldPosition(vec3 position)
 {
-    return length(FindPlanetRelativePosition(position)) - gGroundRadius;
+    return max(1e-4f, length(FindPlanetRelativePosition(position)) - gGroundRadius);
 }
 
 float FindAltitude(vec3 planetRelativePosition)
 {
-    return length(planetRelativePosition) - gGroundRadius;
+    return max(1e-4f, length(planetRelativePosition) - gGroundRadius);
 }
 
 vec3 ExtinctionCoef(float altitude)
@@ -78,16 +78,17 @@ vec3 ExtinctionCoef(float altitude)
 
 float GetSunAltitude(float time)
 {
-    const float halfPeriod = 60.f;
-    const float beginOffset = .4f;
+    const float halfPeriod = 120.f;
+    const float beginOffset = .2f;
     return -gPI * time / halfPeriod + beginOffset;
+    return -30.f * gPI / 180.f;
 }
 
-vec3 SampleLUT(sampler2D lut, float altitude, float cosTheta)
+vec4 SampleLUT(sampler2D lut, float altitude, float cosTheta)
 {
     const float u = clamp(.5f + .5f * cosTheta, .0f, 1.f);
     const float v = clamp(altitude / (gAtmosphereRadius - gGroundRadius), .0f, 1.f);
-    return texture(lut, vec2(u, v)).xyz;
+    return texture(lut, vec2(u, v));
 }
 
 vec3 SampleLUT(sampler2D lut, vec3 position, vec3 sunDirection)
@@ -100,7 +101,7 @@ vec3 SampleLUT(sampler2D lut, vec3 position, vec3 sunDirection)
     return texture(lut, vec2(u, v)).rgb;
 }
 
-vec3 FindSkyScattering(sampler2D transmittanceImage, sampler2D multipleScatteringImage
+vec3 FindSkyScatteringRGB(sampler2D transmittanceImage, sampler2D multipleScatteringImage
 , vec3 viewPosition, vec3 rayDirection, vec3 sunDirection)
 {
     const vec2 atmosphereExits = RayIntersectSphere2D(viewPosition, rayDirection, gAtmosphereRadius);
@@ -133,7 +134,7 @@ vec3 FindSkyScattering(sampler2D transmittanceImage, sampler2D multipleScatterin
 
         const vec3 position = rayStart + t * rayDirection;
 
-        const float altitude = max(.0f, FindAltitude(position));
+        const float altitude = FindAltitude(position);
 
         const float mieScattering = MieScattering(altitude);
         const vec3 rayleighScattering = RayleighScattering(altitude);
@@ -143,12 +144,12 @@ vec3 FindSkyScattering(sampler2D transmittanceImage, sampler2D multipleScatterin
         const vec3 up = normalize(position);
         const float sunZenithCosAngle = dot(sunDirection, up);
 
-        const vec3 sunTransmittance = SampleLUT(transmittanceImage, altitude, sunZenithCosAngle);
-        const vec3 psims = SampleLUT(multipleScatteringImage, altitude, sunZenithCosAngle);
+        const vec3 sunTransmittance = SampleLUT(transmittanceImage, altitude, sunZenithCosAngle).rgb;
+        const vec3 psims = SampleLUT(multipleScatteringImage, altitude, sunZenithCosAngle).rgb;
 
         const vec3 rayleighInScattering = rayleighScattering * (rayleighPhase * sunTransmittance + psims);
         const vec3 mieInScattering = mieScattering * (miePhase * sunTransmittance + psims);
-        const vec3 totalInScattering = rayleighInScattering + mieInScattering;
+        const vec3 totalInScattering = gSunRGBIrradiance * (rayleighInScattering + mieInScattering);
 
         const vec3 scatteringIntegral = (totalInScattering - totalInScattering * stepTransmittance) / extinction;
 
@@ -158,4 +159,3 @@ vec3 FindSkyScattering(sampler2D transmittanceImage, sampler2D multipleScatterin
     }
     return luminance;
 }
-
