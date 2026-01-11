@@ -17,9 +17,9 @@ vec4 SpectralExtinctionCoef(float altitude)
 {
     const vec4 molecular_absorption = GetMolecularAbsorptionCoef(altitude);
     const vec4 molecular_scattering = GetMolecularScatteringCoef(altitude);
-    //    const float mieDensity = MieDensity(altitude);
-    //    const float mieScattering = gMieScatteringCoef * mieDensity;
-    //    const float mieAbsorption = gMieAbsorptionCoef * mieDensity;
+    const float mieDensity = MieDensity(altitude);
+    const float mieScattering = gMieScatteringCoef * mieDensity;
+    const float mieAbsorption = gMieAbsorptionCoef * mieDensity;
     return molecular_absorption + molecular_scattering;
 }
 
