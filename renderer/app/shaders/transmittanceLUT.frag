@@ -39,7 +39,7 @@ vec4 CalculateTransmittance(vec3 position, float cosTheta)
 {
     //    return exp(-TransmittanceExponent(position, cosTheta));
     const float sinTheta = sqrt(max(0.f, 1.f - cosTheta * cosTheta));
-    const vec3 direction = vec3(.0f, cosTheta, -sinTheta);
+    const vec3 direction = normalize(vec3(.0f, cosTheta, sinTheta));
     if (RayIntersectSphere(position, direction, gGroundRadius) > 0.0) {
         return vec4(.0f);
     }

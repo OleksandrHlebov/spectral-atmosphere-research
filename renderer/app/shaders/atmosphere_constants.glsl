@@ -19,5 +19,5 @@ const vec3 gSunRGBIrradiance = vec3(1.500, 1.864, 1.715) * 150.0;
 
 const int gOpticalDepthSamples = 40;
 const int gMultipleScatteringSamples = 20;
-const int gScatteringSamples = 20;
+const int gScatteringSamples = 40;
 const int gSqrtSamples = 20;

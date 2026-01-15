@@ -76,12 +76,27 @@ vec3 ExtinctionCoef(float altitude)
     + ozoneScattering + ozoneAbsorption;
 }
 
+vec3 FishEyeRayDirection(vec2 uv, float aspectRatio)
+{
+    if (aspectRatio < 1.0) {
+        uv.y *= 1.0 / aspectRatio;
+    } else {
+        uv.x *= aspectRatio;
+    }
+    const float phi = atan(uv.y, uv.x);
+    const float theta = length(uv) * gPI * .5f;
+    const float sinTheta = sin(theta);
+    const float cosTheta = cos(theta);
+
+    return vec3(sinTheta * cos(phi), cosTheta, -sinTheta * sin(phi));
+}
+
 float GetSunAltitude(float time)
 {
     const float halfPeriod = 120.f;
-    const float beginOffset = .2f;
-    return -gPI * time / halfPeriod + beginOffset;
-    return -30.f * gPI / 180.f;
+    const float beginOffset = 1.f * gPI / 180.f;
+    //    return gPI * time / halfPeriod + beginOffset;
+    return beginOffset;
 }
 
 vec4 SampleLUT(sampler2D lut, float altitude, float cosTheta)

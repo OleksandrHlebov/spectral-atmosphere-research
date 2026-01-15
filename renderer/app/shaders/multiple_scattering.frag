@@ -13,15 +13,6 @@ layout (location = 0) out vec4 outColor;
 
 layout (binding = 2) uniform sampler2D transmittanceImage;
 
-vec3 FindSphericalDirection(float theta, float phi)
-{
-    const float cosPhi = cos(phi);
-    const float sinPhi = sin(phi);
-    const float cosTheta = cos(theta);
-    const float sinTheta = sin(theta);
-    return vec3(sinPhi * sinTheta, cosPhi, sinPhi * cosTheta);
-}
-
 void CalculateMultipleScattering(vec3 position, vec3 sunDirection, out vec4 totalLuminance, out vec4 fms)
 {
     totalLuminance = vec4(.0f);
@@ -101,7 +92,7 @@ void main()
     const float height = mix(gGroundRadius, gAtmosphereRadius, inUV.y);
 
     const vec3 position = vec3(.0f, height, .0f);
-    const vec3 lightDirection = vec3(.0f, cosTheta, -sin(theta));
+    const vec3 lightDirection = vec3(.0f, cosTheta, sin(theta));
 
     vec4 luminance, fms;
     CalculateMultipleScattering(position, lightDirection, luminance, fms);

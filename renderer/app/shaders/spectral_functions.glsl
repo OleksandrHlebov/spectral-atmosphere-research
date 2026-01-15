@@ -20,7 +20,7 @@ vec4 SpectralExtinctionCoef(float altitude)
     const float mieDensity = MieDensity(altitude);
     const float mieScattering = gMieScatteringCoef * mieDensity;
     const float mieAbsorption = gMieAbsorptionCoef * mieDensity;
-    return molecular_absorption + molecular_scattering;
+    return molecular_absorption + molecular_scattering + mieScattering + mieAbsorption;
 }
 
 vec3 FindSkyScatteringSpectral(sampler2D transmittanceImage, sampler2D multipleScatteringImage

@@ -30,6 +30,15 @@ vec2 RayIntersectSphere2D(
     );
 }
 
+vec3 FindSphericalDirection(float theta, float phi)
+{
+    const float cosPhi = cos(phi);
+    const float sinPhi = sin(phi);
+    const float cosTheta = cos(theta);
+    const float sinTheta = sin(theta);
+    return vec3(sinPhi * sinTheta, cosPhi, sinPhi * cosTheta);
+}
+
 float safeacos(const float x) {
     return acos(clamp(x, -1.0, 1.0));
 }

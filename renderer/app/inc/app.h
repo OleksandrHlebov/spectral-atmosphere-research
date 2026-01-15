@@ -8,6 +8,8 @@
 #include "descriptor_set.h"
 #include "VkBootstrap.h"
 
+class TimingQueryPool;
+
 namespace vkc
 {
 	class CommandPool;
@@ -26,6 +28,7 @@ public:
 	template<typename T>
 	using uptr = std::unique_ptr<T>;
 
+	void ProfilePipelinesAndDump();
 	App(int width, int height);
 	~App();
 
@@ -47,30 +50,35 @@ public:
 	}
 
 private:
-	void         CreateWindow(int width, int height);
-	void         CreateInstance();
-	void         CreateSurface();
-	void         CreateDevice();
-	void         CreateSwapchain();
-	void         CreateSyncObjects();
-	void         CreateDescriptorPool();
-	void         CreateDescriptorSets();
-	void         CreateVertexBuffer();
-	void         CreateGraphicsPipeline();
-	void         CreateCmdPool();
-	void         CreateDescriptorSetLayouts();
-	void         CreateResources();
-	void         CreateDepth();
-	void         GenerateTransmittanceLUT(vkc::CommandBuffer& commandBuffer);
-	void         GenerateMultScatteringLUT(vkc::CommandBuffer& commandBuffer);
-	void         GenerateSkyviewLUT(vkc::CommandBuffer& commandBuffer);
-	void         RecreateSwapchain();
-	void         RecordCommandBuffer(vkc::CommandBuffer& commandBuffer, size_t imageIndex);
-	void         Submit(vkc::CommandBuffer& commandBuffer) const;
-	void         Present(uint32_t imageIndex);
-	void         End();
-	uptr<Camera> m_Camera;
-	vkc::Context m_Context{};
+	void RenderAtmosphereToAFile(bool hdr = false);
+
+	void CreateWindow(int width, int height);
+	void CreateInstance();
+	void CreateSurface();
+	void CreateDevice();
+	void CreateSwapchain();
+	void CreateSyncObjects();
+	void CreateDescriptorPool();
+	void CreateDescriptorSets();
+	void CreateVertexBuffer();
+	void CreateGraphicsPipeline();
+	void CreateCmdPool();
+	void CreateDescriptorSetLayouts();
+	void CreateResources();
+	void CreateDepth();
+	void GenerateTransmittanceLUT(vkc::CommandBuffer& commandBuffer);
+	void GenerateMultScatteringLUT(vkc::CommandBuffer& commandBuffer);
+	void GenerateSkyviewLUT(vkc::CommandBuffer& commandBuffer);
+	void RenderSkyToImage
+	(vkc::CommandBuffer& commandBuffer, vkc::Image& stagingImage, vkc::ImageView& stagingImageView, vkc::Pipeline& pipeline);
+	std::tuple<vkc::Pipeline, vkc::Image, vkc::ImageView> GenerateTempImageAndPipeline(bool hdr);
+	void                                                  RecreateSwapchain();
+	void                                                  RecordCommandBuffer(vkc::CommandBuffer& commandBuffer, size_t imageIndex);
+	void                                                  Submit(vkc::CommandBuffer& commandBuffer) const;
+	void                                                  Present(uint32_t imageIndex);
+	void                                                  End();
+	uptr<Camera>                                          m_Camera;
+	vkc::Context                                          m_Context{};
 
 	uptr<vkc::DescriptorSetLayout> m_FrameDescSetLayout{};
 	uptr<vkc::DescriptorPool>      m_DescPool{};
@@ -112,10 +120,13 @@ private:
 	std::vector<VkSemaphore> m_RenderFinishedSemaphores{};
 	std::vector<VkFence>     m_InFlightFences{};
 
+	uptr<TimingQueryPool> m_QueryPool;
+
 	uint32_t m_FramesInFlight{};
 	uint32_t m_CurrentFrame{};
 
-	bool m_UseSkyview{ true };
+	bool       m_UseSkyview{ false };
+	const bool m_Spectral{ false }; // requires changes made to pipelines, not adapted for runtime toggle
 };
 
 #endif //APP_H

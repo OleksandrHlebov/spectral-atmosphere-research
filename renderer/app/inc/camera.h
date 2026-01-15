@@ -113,8 +113,7 @@ public:
 		return m_Projection;
 	}
 
-private
-:
+private:
 	void RecalculateProjection()
 	{
 		m_Projection       = glm::perspective(glm::radians(m_Fov), m_AspectRatio, m_Near, m_Far);
@@ -123,10 +122,11 @@ private
 
 	static glm::vec3 constexpr WORLD_UP{ 0.0f, 1.0f, 0.0f };
 	static glm::vec3 constexpr WORLD_FORWARD{ 0.0f, 0.0f, 1.0f };
+	static glm::vec3 constexpr WORLD_RIGHT{ 1.0f, 0.0f, 0.0f };
 
 	glm::mat4 m_Projection{};
 	glm::vec3 m_Position;
-	glm::vec3 m_Forward{ WORLD_FORWARD };
+	glm::vec3 m_Forward{ glm::normalize(WORLD_RIGHT) };
 	float     m_Fov;
 	float     m_AspectRatio;
 	float     m_Speed{ 2.f };

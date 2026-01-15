@@ -33,6 +33,7 @@ set(SHADER_SOURCES
     "basic_color.frag"
     "basic_transform.vert"
     "sky_color.frag"
+    "sky_color_hdr.frag"
     "transmittanceLUT.frag"
     "multiple_scattering.frag"
     "skyview.frag"
@@ -42,12 +43,16 @@ set(HEADER
     inc/helper.h
     inc/camera.h
     inc/world_time.h
-    inc/datatypes.h)
+    inc/datatypes.h
+    inc/file_saver.h
+    inc/timing_query_pool.h)
 
 set(SOURCE
     src/app.cpp
     src/helper.cpp
-    src/world_time.cpp)
+    src/world_time.cpp
+    src/file_saver.cpp
+    src/timing_query_pool.cpp)
 
 add_library(App STATIC
             ${SOURCE}
@@ -67,9 +72,15 @@ message(STATUS "VulkanClasses source dir: ${VulkanClasses_SOURCE_DIR}")
 get_target_property(vulkan_inc VulkanClasses INTERFACE_INCLUDE_DIRECTORIES)
 message(STATUS "VulkanClasses include dirs: ${vulkan_inc}")
 
+target_include_directories(App SYSTEM PUBLIC
+                           ${tinyexr_SOURCE_DIR}
+                           ${stb_SOURCE_DIR}
+                           )
+
 target_link_libraries(${PROJECT_NAME} PUBLIC
                       VulkanClasses
-                      glm::glm)
+                      glm::glm
+                      tinyexr)
 
 foreach (shader IN LISTS SHADER_SOURCES)
 	Shader_Compile(${shader})
