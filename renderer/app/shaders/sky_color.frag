@@ -79,13 +79,8 @@ void main()
         if (cameraHeight > gAtmosphereRadius || !UseSkyview)
         {
             // directly raymarch when skyview disabled/unavailable
-            const float horizonAngle = safeacos(sqrt(cameraHeight * cameraHeight - gGroundRadius * gGroundRadius) / cameraHeight);
-            const float altitudeAngle = horizonAngle - acos(dot(rayDirection, planetUp));
-
-            const float cosElevation = cos(altitudeAngle);
-            const vec3 correctedRay = normalize(rayDirection - planetUp * dot(rayDirection, planetUp) + planetUp * sin(altitudeAngle) / cosElevation);
             color = SimpleToneMap(FindSkyScattering(transmittanceImage, multipleScatteringImage
-                                  , planetRelativePosition, correctedRay, sunDirection, spectral));
+                                  , planetRelativePosition, rayDirection, sunDirection, spectral));
         }
         else
         color = SimpleToneMap(SampleSkyviewLUT(rayDirection, sunDirection));
