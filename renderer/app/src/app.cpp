@@ -165,7 +165,7 @@ App::App(int width, int height)
 
 	// ProfilePipelinesAndDump();
 
-	// RenderAtmosphereToAFile(true);
+	RenderAtmosphereToAFile();
 }
 
 App::~App() = default;
