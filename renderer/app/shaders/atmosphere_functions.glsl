@@ -95,7 +95,7 @@ float GetSunAltitude(float time)
 {
     const float halfPeriod = 120.f;
     const float beginOffset = 1.f * gPI / 180.f;
-    //    return gPI * time / halfPeriod + beginOffset;
+    return gPI * time / halfPeriod + beginOffset;
     return beginOffset;
 }
 

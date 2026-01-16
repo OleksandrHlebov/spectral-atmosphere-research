@@ -165,7 +165,7 @@ App::App(int width, int height)
 
 	// ProfilePipelinesAndDump();
 
-	RenderAtmosphereToAFile(true);
+	// RenderAtmosphereToAFile(true);
 }
 
 App::~App() = default;
@@ -355,7 +355,7 @@ std::tuple<vkc::Pipeline, vkc::Image, vkc::ImageView> App::GenerateTempImageAndP
 
 	vkc::ShaderStage const vert{ m_Context, help::ReadFile("shaders/fsquad.spv"), VK_SHADER_STAGE_VERTEX_BIT };
 	vkc::ShaderStage       sky{
-		m_Context, help::ReadFile(hdr ? "shaders/sky_color_hdr.spv" : "shaders/sky_color.spv"), VK_SHADER_STAGE_FRAGMENT_BIT
+		m_Context, help::ReadFile(hdr ? "shaders/sky_color_hdr.spv" : "shaders/sky_color_sdr.spv"), VK_SHADER_STAGE_FRAGMENT_BIT
 	};
 	sky.AddSpecializationConstant(static_cast<uint32_t>(m_Spectral));
 

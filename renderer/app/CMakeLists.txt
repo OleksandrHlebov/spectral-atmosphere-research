@@ -34,6 +34,7 @@ set(SHADER_SOURCES
     "basic_transform.vert"
     "sky_color.frag"
     "sky_color_hdr.frag"
+    "sky_color_sdr.frag"
     "transmittanceLUT.frag"
     "multiple_scattering.frag"
     "skyview.frag"

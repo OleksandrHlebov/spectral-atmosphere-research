@@ -59,7 +59,7 @@ vec3 SampleSkyviewLUT(vec3 rayDirection, vec3 sunDirection)
 void main()
 {
     const float depth = texelFetch(depthBuffer, ivec2(inUV * textureSize(depthBuffer, 0)), 0).r;
-    //    if (depth >= 1.f)
+    if (depth >= 1.f)
     {
         const vec3 planetRelativePosition = FindPlanetRelativePosition(CameraPosition_Fov.xyz);
         const float cameraHeight = length(planetRelativePosition);
@@ -69,17 +69,16 @@ void main()
         const vec3 cameraRight = normalize(cross(CameraForward_AspectRatio.xyz, planetUp));
         const vec3 cameraUp = cross(cameraRight, CameraForward_AspectRatio.xyz);
         const vec2 centeredUV = (inUV - .5f) * 2.f;
-        //        const vec3 rayDirection = normalize(
-        //            CameraForward_AspectRatio.xyz +
-        //            cameraRight * centeredUV.x * CameraPosition_Fov.w * CameraForward_AspectRatio.w -
-        //            cameraUp * centeredUV.y * CameraPosition_Fov.w
-        //        );
-        const vec3 rayDirection = FishEyeRayDirection(centeredUV, CameraForward_AspectRatio.w);
+        const vec3 rayDirection = normalize(
+            CameraForward_AspectRatio.xyz +
+            cameraRight * centeredUV.x * CameraPosition_Fov.w * CameraForward_AspectRatio.w -
+            cameraUp * centeredUV.y * CameraPosition_Fov.w
+        );
 
         vec3 color;
         if (cameraHeight > gAtmosphereRadius || !UseSkyview)
         {
-            //
+            // directly raymarch when skyview disabled/unavailable
             const float horizonAngle = safeacos(sqrt(cameraHeight * cameraHeight - gGroundRadius * gGroundRadius) / cameraHeight);
             const float altitudeAngle = horizonAngle - acos(dot(rayDirection, planetUp));
 
@@ -94,5 +93,5 @@ void main()
         outColor = vec4(color, 1.f);
 
     }
-    //    else discard;
+    else discard;
 }

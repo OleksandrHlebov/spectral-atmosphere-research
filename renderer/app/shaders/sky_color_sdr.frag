@@ -18,6 +18,22 @@ layout (push_constant) uniform Constants
     bool UseSkyview;
 };
 
+vec3 GammaCorrect(vec3 linear_srgb)
+{
+    vec3 a = 12.92 * linear_srgb;
+    vec3 b = 1.055 * pow(linear_srgb, vec3(1.0 / 2.4)) - 0.055;
+    vec3 c = step(vec3(0.0031308), linear_srgb);
+    return mix(a, b, c);
+}
+
+vec3 SimpleToneMap(vec3 color)
+{
+    const float k = 0.05;
+    color = 1.0 - exp(-k * color);
+    //    color = clamp(GammaCorrect(color), 0.0, 1.0);
+    return color;
+}
+
 layout (location = 0) out vec4 outColor;
 
 vec3 SampleSkyviewLUT(vec3 rayDirection, vec3 sunDirection)
@@ -46,14 +62,14 @@ void main()
     const vec3 planetUp = planetRelativePosition / cameraHeight;
     const float altitude = GetSunAltitude(Time);
     const vec3 sunDirection = normalize(vec3(cos(altitude), sin(altitude), .0f));
-    //    const vec3 cameraRight = normalize(cross(CameraForward_AspectRatio.xyz, planetUp));
-    //    const vec3 cameraUp = cross(cameraRight, CameraForward_AspectRatio.xyz);
+    const vec3 cameraRight = normalize(cross(CameraForward_AspectRatio.xyz, planetUp));
+    const vec3 cameraUp = cross(cameraRight, CameraForward_AspectRatio.xyz);
     const vec2 centeredUV = (inUV - .5f) * 2.f;
-    //    const vec3 rayDirection = normalize(
-    //        CameraForward_AspectRatio.xyz +
-    //        cameraRight * centeredUV.x * CameraPosition_Fov.w * CameraForward_AspectRatio.w -
-    //        cameraUp * centeredUV.y * CameraPosition_Fov.w
-    //    );
+    //        const vec3 rayDirection = normalize(
+    //            CameraForward_AspectRatio.xyz +
+    //            cameraRight * centeredUV.x * CameraPosition_Fov.w * CameraForward_AspectRatio.w -
+    //            cameraUp * centeredUV.y * CameraPosition_Fov.w
+    //        );
     const vec3 rayDirection = FishEyeRayDirection(centeredUV, CameraForward_AspectRatio.w);
 
     vec3 color;
@@ -65,11 +81,11 @@ void main()
 
         const float cosElevation = cos(altitudeAngle);
         const vec3 correctedRay = normalize(rayDirection - planetUp * dot(rayDirection, planetUp) + planetUp * sin(altitudeAngle) / cosElevation);
-        color = FindSkyScattering(transmittanceImage, multipleScatteringImage
-        , planetRelativePosition, correctedRay, sunDirection, spectral);
+        color = SimpleToneMap(FindSkyScattering(transmittanceImage, multipleScatteringImage
+                              , planetRelativePosition, correctedRay, sunDirection, spectral));
     }
     else
-    color = SampleSkyviewLUT(rayDirection, sunDirection);
+    color = SimpleToneMap(SampleSkyviewLUT(rayDirection, sunDirection));
 
     outColor = vec4(color, 1.f);
 }
