@@ -20,56 +20,44 @@ layout (push_constant) uniform Constants
 
 layout (location = 0) out vec4 outColor;
 
-vec3 SampleSkyviewLUT(vec3 rayDirection, vec3 sunDirection)
+vec3 SampleSkyviewLUT(float theta, float phi)
 {
-    const vec3 planetRelativePosition = FindPlanetRelativePosition(CameraPosition_Fov.xyz);
+    const float elevation = gPI * 0.5 - theta;
+    const float u = .5f * (phi + .5f * gPI) / gPI + .5f;
+    const float v = 0.5 + 0.5 * sign(elevation) * sqrt(abs(elevation) * 2.0 / gPI);
 
-    const float height = length(planetRelativePosition);
-    const vec3 up = planetRelativePosition / height;
-
-    const float horizonAngle = safeacos(sqrt(pow(height, 2) - pow(gGroundRadius, 2)) / height);
-    const float altitudeAngle = horizonAngle - acos(dot(rayDirection, up));
-
-    const vec3 projectedDirection = normalize(rayDirection - up * dot(rayDirection, up));
-
-    const float azimuthAngle = atan(rayDirection.x, -rayDirection.z);
-    const float v = 0.5 + 0.5 * sign(altitudeAngle) * sqrt(abs(altitudeAngle) * 2.0 / gPI);
-    const vec2 uv = vec2(azimuthAngle / (2.0 * gPI) + .5f, v);
-
-    return texture(skyviewImage, uv).rgb;
+    return texture(skyviewImage, vec2(u, v)).rgb;
 }
 
 void main()
 {
     const vec3 planetRelativePosition = FindPlanetRelativePosition(CameraPosition_Fov.xyz);
     const float cameraHeight = length(planetRelativePosition);
-    const vec3 planetUp = planetRelativePosition / cameraHeight;
     const float altitude = GetSunAltitude(Time);
     const vec3 sunDirection = normalize(vec3(cos(altitude), sin(altitude), .0f));
-    //    const vec3 cameraRight = normalize(cross(CameraForward_AspectRatio.xyz, planetUp));
-    //    const vec3 cameraUp = cross(cameraRight, CameraForward_AspectRatio.xyz);
-    const vec2 centeredUV = (inUV - .5f) * 2.f;
-    //    const vec3 rayDirection = normalize(
-    //        CameraForward_AspectRatio.xyz +
-    //        cameraRight * centeredUV.x * CameraPosition_Fov.w * CameraForward_AspectRatio.w -
-    //        cameraUp * centeredUV.y * CameraPosition_Fov.w
-    //    );
-    const vec3 rayDirection = FishEyeRayDirection(centeredUV, CameraForward_AspectRatio.w);
+    const vec2 centeredUV = inUV - .5f;
+    const vec2 rayAngles = FishEyeRayAngles(centeredUV, CameraForward_AspectRatio.w);
 
     vec3 color;
-    if (cameraHeight > gAtmosphereRadius || !UseSkyview)
+    // https://github.com/fgarlin/skytracer/blob/master/src/camera.cxx
+    if (length(centeredUV) > 0.5f + 1e-3f)
+    {
+        color = vec3(0.0);
+    }
+    else if (cameraHeight > gAtmosphereRadius || !UseSkyview)
     {
         // directly raymarch when skyview disabled/unavailable
-        const float horizonAngle = safeacos(sqrt(cameraHeight * cameraHeight - gGroundRadius * gGroundRadius) / cameraHeight);
-        const float altitudeAngle = horizonAngle - acos(dot(rayDirection, planetUp));
+        float sinTheta = sin(rayAngles.x);
+        float cosTheta = cos(rayAngles.x);
+        float cosPhi = cos(rayAngles.y);
+        float sinPhi = sin(rayAngles.y);
 
-        const float cosElevation = cos(altitudeAngle);
-        const vec3 correctedRay = normalize(rayDirection - planetUp * dot(rayDirection, planetUp) + planetUp * sin(altitudeAngle) / cosElevation);
+        const vec3 rayDirection = normalize(vec3(sinTheta * cosPhi, cosTheta, sinTheta * sinPhi));
         color = FindSkyScattering(transmittanceImage, multipleScatteringImage
-        , planetRelativePosition, correctedRay, sunDirection, spectral);
+        , planetRelativePosition, rayDirection, sunDirection, spectral);
     }
     else
-    color = SampleSkyviewLUT(rayDirection, sunDirection);
+    color = SampleSkyviewLUT(rayAngles.x, rayAngles.y);
 
     outColor = vec4(color, 1.f);
 }

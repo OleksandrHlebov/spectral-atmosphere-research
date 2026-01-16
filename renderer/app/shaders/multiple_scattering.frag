@@ -87,7 +87,7 @@ void CalculateMultipleScattering(vec3 position, vec3 sunDirection, out vec4 tota
 
 void main()
 {
-    const float cosTheta = -(2.f * inUV.x - 1.f);
+    const float cosTheta = (2.f * inUV.x - 1.f);
     const float theta = safeacos(cosTheta);
     const float height = mix(gGroundRadius, gAtmosphereRadius, inUV.y);
 

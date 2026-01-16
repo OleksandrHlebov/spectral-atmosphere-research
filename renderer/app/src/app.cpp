@@ -130,6 +130,16 @@ void App::ProfilePipelinesAndDump()
 	}
 }
 
+void App::RenderAllConfigsToFiles()
+{
+	RenderAtmosphereToAFile();
+	RenderAtmosphereToAFile(true);
+	m_UseSkyview = !m_UseSkyview;
+	RenderAtmosphereToAFile();
+	RenderAtmosphereToAFile(true);
+	m_UseSkyview = !m_UseSkyview;
+}
+
 App::App(int width, int height)
 {
 	m_Camera = std::make_unique<Camera>(glm::vec3(.0f, 1000.f, .0f)
@@ -165,7 +175,7 @@ App::App(int width, int height)
 
 	// ProfilePipelinesAndDump();
 
-	RenderAtmosphereToAFile();
+	RenderAllConfigsToFiles();
 }
 
 App::~App() = default;
@@ -346,7 +356,7 @@ std::tuple<vkc::Pipeline, vkc::Image, vkc::ImageView> App::GenerateTempImageAndP
 	vkc::ImageBuilder builder{ m_Context };
 	vkc::Image        stagingImage = builder
 							  .SetExtent(VkExtent2D{ 1024, 1024 })
-							  .SetFormat(hdr ? VK_FORMAT_R16G16B16A16_SFLOAT : VK_FORMAT_R8G8B8A8_SRGB)
+							  .SetFormat(hdr ? VK_FORMAT_R16G16B16A16_SFLOAT : VK_FORMAT_R8G8B8A8_UNORM)
 							  .SetType(VK_IMAGE_TYPE_2D)
 							  .SetAspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
 							  .Build(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, false);
@@ -480,16 +490,20 @@ void App::RenderAtmosphereToAFile(bool hdr)
 		return;
 	}
 
+	std::string filename{};
+	filename += m_Spectral ? "Spectral" : "RGB";
+	filename += m_UseSkyview ? "_200x100_Skyview" : "_Raymarched";
+
 	if (hdr)
 		SaveEXRFile(pixelBuffer.GetMappedData()
 					, static_cast<int>(stagingImage.GetExtent().width)
 					, static_cast<int>(stagingImage.GetExtent().height)
-					, "atmosphere.exr");
+					, filename + ".exr");
 	else
 		SavePNGFile(pixelBuffer.GetMappedData()
 					, static_cast<int>(stagingImage.GetExtent().width)
 					, static_cast<int>(stagingImage.GetExtent().height)
-					, "atmosphere.png");
+					, filename + ".png");
 	stagingImageView.Destroy(m_Context);
 	stagingImage.Destroy(m_Context);
 	pixelBuffer.Destroy(m_Context);

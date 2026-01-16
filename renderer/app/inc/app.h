@@ -27,8 +27,6 @@ class App final
 public:
 	template<typename T>
 	using uptr = std::unique_ptr<T>;
-
-	void ProfilePipelinesAndDump();
 	App(int width, int height);
 	~App();
 
@@ -50,7 +48,13 @@ public:
 	}
 
 private:
+	std::tuple<vkc::Pipeline, vkc::Image, vkc::ImageView> GenerateTempImageAndPipeline(bool hdr);
+	void                                                  RenderSkyToImage
+	(vkc::CommandBuffer& commandBuffer, vkc::Image& stagingImage, vkc::ImageView& stagingImageView, vkc::Pipeline& pipeline);
+
 	void RenderAtmosphereToAFile(bool hdr = false);
+	void ProfilePipelinesAndDump();
+	void RenderAllConfigsToFiles();
 
 	void CreateWindow(int width, int height);
 	void CreateInstance();
@@ -69,16 +73,14 @@ private:
 	void GenerateTransmittanceLUT(vkc::CommandBuffer& commandBuffer);
 	void GenerateMultScatteringLUT(vkc::CommandBuffer& commandBuffer);
 	void GenerateSkyviewLUT(vkc::CommandBuffer& commandBuffer);
-	void RenderSkyToImage
-	(vkc::CommandBuffer& commandBuffer, vkc::Image& stagingImage, vkc::ImageView& stagingImageView, vkc::Pipeline& pipeline);
-	std::tuple<vkc::Pipeline, vkc::Image, vkc::ImageView> GenerateTempImageAndPipeline(bool hdr);
-	void                                                  RecreateSwapchain();
-	void                                                  RecordCommandBuffer(vkc::CommandBuffer& commandBuffer, size_t imageIndex);
-	void                                                  Submit(vkc::CommandBuffer& commandBuffer) const;
-	void                                                  Present(uint32_t imageIndex);
-	void                                                  End();
-	uptr<Camera>                                          m_Camera;
-	vkc::Context                                          m_Context{};
+	void RecreateSwapchain();
+	void RecordCommandBuffer(vkc::CommandBuffer& commandBuffer, size_t imageIndex);
+	void Submit(vkc::CommandBuffer& commandBuffer) const;
+	void Present(uint32_t imageIndex);
+	void End();
+
+	uptr<Camera> m_Camera;
+	vkc::Context m_Context{};
 
 	uptr<vkc::DescriptorSetLayout> m_FrameDescSetLayout{};
 	uptr<vkc::DescriptorPool>      m_DescPool{};
@@ -126,7 +128,7 @@ private:
 	uint32_t m_CurrentFrame{};
 
 	bool       m_UseSkyview{ false };
-	const bool m_Spectral{ false }; // requires changes made to pipelines, not adapted for runtime toggle
+	bool const m_Spectral{ false }; // requires changes made to pipelines, not adapted for runtime toggle
 };
 
 #endif //APP_H

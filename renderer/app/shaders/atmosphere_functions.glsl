@@ -76,7 +76,7 @@ vec3 ExtinctionCoef(float altitude)
     + ozoneScattering + ozoneAbsorption;
 }
 
-vec3 FishEyeRayDirection(vec2 uv, float aspectRatio)
+vec2 FishEyeRayAngles(vec2 uv, float aspectRatio)
 {
     if (aspectRatio < 1.0) {
         uv.y *= 1.0 / aspectRatio;
@@ -84,17 +84,14 @@ vec3 FishEyeRayDirection(vec2 uv, float aspectRatio)
         uv.x *= aspectRatio;
     }
     const float phi = atan(uv.y, uv.x);
-    const float theta = length(uv) * gPI * .5f;
-    const float sinTheta = sin(theta);
-    const float cosTheta = cos(theta);
-
-    return vec3(sinTheta * cos(phi), cosTheta, -sinTheta * sin(phi));
+    const float theta = length(uv) * gPI;
+    return vec2(theta, phi);
 }
 
 float GetSunAltitude(float time)
 {
     const float halfPeriod = 120.f;
-    const float beginOffset = -5.f * gPI / 180.f;
+    const float beginOffset = 1.f * gPI / 180.f;
     return gPI * time / halfPeriod + beginOffset;
     return beginOffset;
 }
@@ -136,7 +133,7 @@ vec3 FindSkyScatteringRGB(sampler2D transmittanceImage, sampler2D multipleScatte
     const vec3 rayStart = viewPosition + minDistance * rayDirection;
     const float cosTheta = dot(rayDirection, sunDirection);
     const float miePhase = MiePhase(cosTheta);
-    const float rayleighPhase = RayleighPhase(-cosTheta);
+    const float rayleighPhase = RayleighPhase(cosTheta);
 
     vec3 luminance = vec3(.0f);
     vec3 transmittance = vec3(1.f);
