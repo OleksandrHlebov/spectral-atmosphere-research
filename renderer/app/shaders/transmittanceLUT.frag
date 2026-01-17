@@ -67,8 +67,8 @@ vec4 CalculateTransmittance(vec3 position, float cosTheta)
 void main()
 {
     const float cosTheta = 2.f * inUV.x - 1.f;
-    const float altitude = mix(gGroundRadius, gAtmosphereRadius, inUV.y);
-    const vec3 position = vec3(.0f, altitude, .0f);
+    const float height = mix(gGroundRadius, gAtmosphereRadius, inUV.y);
+    const vec3 position = vec3(.0f, height, .0f);
 
     outColor = CalculateTransmittance(position, cosTheta);
 }

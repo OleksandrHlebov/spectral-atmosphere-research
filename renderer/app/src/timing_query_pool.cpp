@@ -76,6 +76,6 @@ void TimingQueryPool::GetResults(vkc::Context const& context, Timings& outResult
 Timing TimingQueryPool::InternalTiming::CalculateTiming(std::vector<uint64_t> const& timestamps, float period) const
 {
 	auto const&             [start, end] = TimestampIndices;
-	static double constexpr nsToUs       = 1. / static_cast<double>(std::micro::den);
-	return Timing{ Label, (timestamps[end] - timestamps[start]) * period * nsToUs };
+	static double constexpr nsToMs       = 1. / static_cast<double>(std::micro::den);
+	return Timing{ Label, (timestamps[end] - timestamps[start]) * period * nsToMs };
 }

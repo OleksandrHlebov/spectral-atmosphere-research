@@ -90,8 +90,8 @@ vec2 FishEyeRayAngles(vec2 uv, float aspectRatio)
 
 float GetSunAltitude(float time)
 {
-    const float halfPeriod = 120.f;
-    const float beginOffset = 1.f * gPI / 180.f;
+    const float halfPeriod = 60.f;
+    const float beginOffset = -5.f * gPI / 180.f;
     return gPI * time / halfPeriod + beginOffset;
     return beginOffset;
 }

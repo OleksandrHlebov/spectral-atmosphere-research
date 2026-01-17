@@ -128,7 +128,7 @@ private:
 	uint32_t m_CurrentFrame{};
 
 	bool       m_UseSkyview{ false };
-	bool const m_Spectral{ false }; // requires changes made to pipelines, not adapted for runtime toggle
+	bool const m_Spectral{ true }; // requires changes made to pipelines, not adapted for runtime toggle
 };
 
 #endif //APP_H

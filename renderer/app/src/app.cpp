@@ -94,6 +94,8 @@ void App::ProfilePipelinesAndDump()
 
 	auto [pipeline, stagingImage, stagingImageView] = GenerateTempImageAndPipeline(false);
 
+	m_UseSkyview = true;
+
 	double const finalRenderTime = ProfileAndReturn(m_Context
 													, m_CommandPool->AllocateCommandBuffer(m_Context)
 													, *m_QueryPool
@@ -121,7 +123,9 @@ void App::ProfilePipelinesAndDump()
 	pipeline.Destroy(m_Context);
 	//
 	{
-		std::ofstream profileDump{ "profile_dump.csv", std::ios::out };
+		std::string filename{ "profile_dump" };
+		filename += m_Spectral ? "_spectral" : "_rgb";
+		std::ofstream profileDump{ filename + ".csv", std::ios::out };
 		profileDump << "transmittance LUT," << transmittanceComputeTime << std::endl;
 		profileDump << "multiple scattering LUT," << multipleScatteringComputeTime << std::endl;
 		profileDump << "sky-view LUT," << skyviewComputeTime << std::endl;
@@ -175,7 +179,7 @@ App::App(int width, int height)
 
 	// ProfilePipelinesAndDump();
 
-	RenderAllConfigsToFiles();
+	// RenderAllConfigsToFiles();
 }
 
 App::~App() = default;
@@ -355,7 +359,7 @@ std::tuple<vkc::Pipeline, vkc::Image, vkc::ImageView> App::GenerateTempImageAndP
 {
 	vkc::ImageBuilder builder{ m_Context };
 	vkc::Image        stagingImage = builder
-							  .SetExtent(VkExtent2D{ 1024, 1024 })
+							  .SetExtent(m_Context.Swapchain.extent)
 							  .SetFormat(hdr ? VK_FORMAT_R16G16B16A16_SFLOAT : VK_FORMAT_R8G8B8A8_UNORM)
 							  .SetType(VK_IMAGE_TYPE_2D)
 							  .SetAspectFlags(VK_IMAGE_ASPECT_COLOR_BIT)
