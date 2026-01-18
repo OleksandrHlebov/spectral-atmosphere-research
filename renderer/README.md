@@ -1,1 +1,1 @@
-[![CMake Windows Build with Vulkan SDK](https://github.com/OleksandrHlebov/VulkanRenderer/actions/workflows/cmake-single-platform.yml/badge.svg?branch=base_triangle)](https://github.com/OleksandrHlebov/VulkanRenderer/actions/workflows/cmake-single-platform.yml)
+
